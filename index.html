@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>西西西洋棋</title>
+    <link rel="stylesheet" href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start; /* 讓內容從頂部開始排列 */
+            min-height: 100vh;
+            background-color: #f0f2f5;
+            padding: 20px;
+            box-sizing: border-box;
+            flex-wrap: wrap; /* 允許在小螢幕上換行 */
+        }
+
+        .container {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+            max-width: 1200px;
+        }
+
+        #game-area {
+            background-color: #ffffff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            margin-bottom: 20px; /* 小螢幕下提供間距 */
+        }
+
+        #myBoard {
+            width: 400px; /* 固定棋盤大小 */
+            margin: 0 auto 20px auto;
+        }
+
+        #game-status {
+            margin-top: 15px;
+            font-size: 1.1em;
+            color: #333;
+        }
+
+        #chat-area {
+            background-color: #ffffff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            width: 300px; /* 固定聊天室寬度 */
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        #chat-box {
+            border: 1px solid #ddd;
+            height: 300px;
+            overflow-y: auto;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-radius: 4px;
+            flex-grow: 1; /* 讓聊天框盡可能佔據空間 */
+        }
+
+        #chat-box div {
+            margin-bottom: 5px;
+        }
+
+        #chat-input-container {
+            display: flex;
+            gap: 5px;
+        }
+
+        #chat-input {
+            flex-grow: 1;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+
+        #send-chat-btn {
+            padding: 8px 12px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9em;
+        }
+
+        #send-chat-btn:hover {
+            background-color: #0056b3;
+        }
+
+        .controls {
+            margin-top: 20px;
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .controls button {
+            padding: 10px 15px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+        }
+
+        .controls button:hover {
+            background-color: #218838;
+        }
+
+        /* 響應式設計 */
+        @media (max-width: 800px) {
+            .container {
+                flex-direction: column;
+                align-items: center;
+            }
+            #myBoard {
+                width: 90vw; /* 在小螢幕上棋盤佔滿寬度 */
+                max-width: 400px;
+            }
+            #chat-area {
+                width: 90vw;
+                max-width: 400px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="game-area">
+            <h1>西西西洋棋</h1>
+            <div id="myBoard"></div>
+            <p id="game-status">載入中...</p>
+            <div class="controls">
+                <button id="new-game-btn">開始新遊戲</button>
+            </div>
+        </div>
+
+        <div id="chat-area">
+            <h2>聊天室</h2>
+            <div id="chat-box">
+                </div>
+            <div id="chat-input-container">
+                <input type="text" id="chat-input" placeholder="輸入訊息...">
+                <button id="send-chat-btn">發送</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+
+    <script>
+        // --- Firebase 配置 ---
+        // 請務必替換為你自己的 Firebase 專案配置！
+        // 你可以在 Firebase 控制台 -> 專案設定 -> 一般 -> 你的應用程式 找到這些資訊
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_AUTH_DOMAIN",
+            databaseURL: "YOUR_DATABASE_URL",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_STORAGE_BUCKET",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+
+        // 初始化 Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        // 固定的遊戲房間 ID (實際應用中應讓用戶選擇或生成)
+        const gameId = "main_chess_room"; 
+        const gameRef = db.ref('games/' + gameId);
+        const chatRef = db.ref('games/' + gameId + '/chat');
+
+        // --- 遊戲邏輯與棋盤初始化 ---
+        var board = null;
+        var game = new Chess();
+        var $status = $('#game-status');
+        var playerColor = 'w'; // 預設玩家顏色為白，在實際對戰中應動態分配
+
+        function onDragStart (source, piece, position, orientation) {
+            // 遊戲結束時禁止拖拽
+            if (game.game_over()) return false;
+
+            // 確保玩家只能拖拽自己顏色的棋子
+            // TODO: 在實際聯機遊戲中，需要判斷當前輪到誰下，以及本地玩家的顏色
+            if ((game.turn() === 'w' && piece.search(/^b/) !== -1) ||
+                (game.turn() === 'b' && piece.search(/^w/) !== -1)) {
+                return false;
+            }
+
+            // 如果不是輪到自己下棋，禁止拖拽
+            // TODO: 這裡需要知道當前玩家的顏色才能做判斷
+            // if (game.turn() !== playerColor) return false;
+        }
+
+        function onDrop (source, target) {
+            var move = game.move({
+                from: source,
+                to: target,
+                promotion: 'q' // 預設升變為皇后，實際需提供選項
+            });
+
+            // 如果移動不合法，棋子彈回原位
+            if (move === null) return 'snapback';
+
+            // 將棋譜和最新移動更新到 Firebase
+            gameRef.update({
+                fen: game.fen(),
+                history: game.history(), // 可選：儲存整個移動歷史
+                lastMove: {
+                    from: move.from,
+                    to: move.to,
+                    piece: move.piece,
+                    san: move.san
+                },
+                turn: game.turn() // 記錄當前是誰的回合
+            });
+
+            // 本地狀態更新會透過 Firebase 監聽器觸發，所以這裡不需要直接調用 updateStatus()
+        }
+
+        // 棋子移動結束後，讓棋盤自動對齊，這是 Chessboard.js 的選項
+        function onSnapEnd () {
+            board.position(game.fen());
+        }
+
+        function updateStatus () {
+            var status = '';
+            var moveColor = (game.turn() === 'b') ? '黑色' : '白色';
+
+            if (game.in_checkmate()) {
+                status = '遊戲結束，' + moveColor + ' 被將死！';
+            } else if (game.in_draw()) {
+                status = '遊戲結束，和局！'; // 包含 Stalemate, Threefold Repetition, Insufficient Material
+            } else {
+                status = moveColor + ' 下棋中';
+                if (game.in_check()) {
+                    status += ' (被照將！)';
+                }
+            }
+            $status.html(status);
+        }
+
+        // --- 棋盤配置 ---
+        var boardConfig = {
+            draggable: true,
+            position: 'start', // 初始棋盤位置
+            onDragStart: onDragStart,
+            onDrop: onDrop,
+            onSnapEnd: onSnapEnd
+        };
+        board = Chessboard('myBoard', boardConfig);
+
+        // --- Firebase 聯機同步 ---
+        gameRef.on('value', (snapshot) => {
+            const data = snapshot.val();
+            if (data && data.fen) {
+                // 如果 Firebase 中的 FEN 與本地不同，則更新本地遊戲狀態和棋盤
+                if (data.fen !== game.fen()) {
+                    game.load(data.fen);
+                    board.position(data.fen);
+                }
+                updateStatus(); // 每次有更新都更新狀態顯示
+            } else {
+                // 如果是第一次載入或資料庫中沒有遊戲，則初始化
+                if (!snapshot.exists()) {
+                    initializeNewGame();
+                }
+            }
+        });
+
+        function initializeNewGame() {
+            game.reset(); // 重置本地遊戲狀態
+            gameRef.set({ // 重置 Firebase 中的遊戲狀態
+                fen: game.fen(),
+                history: [],
+                turn: 'w',
+                chat: [
+                    {user: "系統", msg: "遊戲開始！", timestamp: Date.now()}
+                ]
+            });
+            board.position(game.fen()); // 確保棋盤顯示初始狀態
+        }
+
+        // --- 聊天功能 ---
+        $('#send-chat-btn').on('click', function() {
+            const message = $('#chat-input').val().trim();
+            if (message) {
+                chatRef.push({
+                    user: "玩家", // 實際應用中應為用戶名
+                    msg: message,
+                    timestamp: Date.now()
+                });
+                $('#chat-input').val(''); // 清空輸入框
+            }
+        });
+
+        // 監聽聊天訊息新增
+        chatRef.on('child_added', (snapshot) => {
+            const msg = snapshot.val();
+            const chatBox = $('#chat-box');
+            const date = new Date(msg.timestamp);
+            const timeString = date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            chatBox.append(`<div>[${timeString}] <b>${msg.user}:</b> ${msg.msg}</div>`);
+            chatBox.scrollTop(chatBox[0].scrollHeight); // 自動滾動到底部
+        });
+
+        // --- 控制按鈕 ---
+        $('#new-game-btn').on('click', function() {
+            if (confirm("確定要開始一局新遊戲嗎？這會重置當前遊戲！")) {
+                initializeNewGame();
+            }
+        });
+
+        // 初始化時確保棋盤狀態和遊戲狀態一致
+        updateStatus();
+    </script>
+</body>
+</html>
