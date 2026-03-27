@@ -182,11 +182,11 @@
 firebase.initializeApp(firebaseConfig);
 
 // 建立資料庫物件
-var database = firebase.database();
+var db = firebase.database();
 
 
 // 全域輸出
-window.database = database;
+window.db = db;
 
         // 固定的遊戲房間 ID (實際應用中應讓用戶選擇或生成)
         const gameId = "main_chess_room"; 
