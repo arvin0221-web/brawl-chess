@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
@@ -37,6 +36,11 @@ body {
 
 <h1>西西西洋棋</h1>
 
+<!-- 🔥 房間 + 名字 -->
+<input id="nameInput" placeholder="你的名字">
+<input id="roomInput" placeholder="房間ID">
+<button onclick="joinRoom()">加入房間</button>
+
 <div id="myBoard"></div>
 <p id="game-status"></p>
 
@@ -58,7 +62,7 @@ body {
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
 
 <script>
-// ✅ Firebase 初始化（最上面）
+// ================= Firebase =================
 const firebaseConfig = {
   apiKey: "AIzaSyDzIXHlM0TyySFC7qNOsvFaD1X7uk58HXs",
   authDomain: "team-chess-2989a.firebaseapp.com",
@@ -72,21 +76,37 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-// ✅ 基本變數
+// ================= 變數 =================
 let myId = "player_" + Math.random().toString(36).substr(2, 9);
 let playerColor = null;
+let playerName = "玩家";
+let gameId = "default";
 
-const gameId = "main_chess_room";
-const gameRef = db.ref('games/' + gameId);
-const chatRef = db.ref('games/' + gameId + '/chat');
-const playersRef = db.ref('games/' + gameId + '/players');
+let gameRef, chatRef, playersRef;
 
-// ✅ 棋盤
 var board = null;
 var game = new Chess();
 
-// ✅ 選顏色
+let selectedSquare = null;
+
+// ================= 房間 =================
+function joinRoom() {
+
+    playerName = document.getElementById("nameInput").value || "玩家";
+    gameId = document.getElementById("roomInput").value || "default";
+
+    gameRef = db.ref('games/' + gameId);
+    chatRef = db.ref('games/' + gameId + '/chat');
+    playersRef = db.ref('games/' + gameId + '/players');
+
+    startListeners();
+
+    alert("已加入房間：" + gameId);
+}
+
+// ================= 玩家顏色 =================
 function chooseColor(color) {
+
     playersRef.once('value', snap => {
         const players = snap.val() || {};
 
@@ -94,8 +114,8 @@ function chooseColor(color) {
             if (!players.white || players.white === myId) {
                 playersRef.update({ white: myId });
                 playerColor = 'w';
-                alert("你是白棋");
                 board.orientation('white');
+                alert("你是白棋");
             } else alert("白棋已被選走！");
         }
 
@@ -103,33 +123,53 @@ function chooseColor(color) {
             if (!players.black || players.black === myId) {
                 playersRef.update({ black: myId });
                 playerColor = 'b';
-                alert("你是黑棋");
                 board.orientation('black');
+                alert("你是黑棋");
             } else alert("黑棋已被選走！");
         }
     });
 }
 
-// ✅ 自動同步顏色（重整不壞）
-playersRef.on('value', snap => {
-    const players = snap.val() || {};
+// ================= 監聽 =================
+function startListeners() {
 
-    if (players.white === myId) {
-        playerColor = 'w';
-        board.orientation('white');
-    } else if (players.black === myId) {
-        playerColor = 'b';
-        board.orientation('black');
-    }
-});
+    gameRef.on('value', snap => {
+        const data = snap.val();
+        if (data && data.fen) {
+            game.load(data.fen);
+            board.position(data.fen);
+        } else {
+            newGame();
+        }
+    });
 
-// ✅ 拖動限制
+    chatRef.on('child_added', snap => {
+        let data = snap.val();
+        let div = document.createElement("div");
+        div.innerText = data.name + ": " + data.msg;
+        document.getElementById("chat-box").appendChild(div);
+    });
+
+    playersRef.on('value', snap => {
+        const players = snap.val() || {};
+
+        if (players.white === myId) {
+            playerColor = 'w';
+            board.orientation('white');
+        } else if (players.black === myId) {
+            playerColor = 'b';
+            board.orientation('black');
+        }
+    });
+}
+
+// ================= 拖曳 =================
 function onDragStart(source, piece) {
 
     if (game.game_over()) return false;
 
     if (!playerColor) {
-        alert("請先選擇顏色");
+        alert("請先選顏色");
         return false;
     }
 
@@ -141,7 +181,7 @@ function onDragStart(source, piece) {
     if (game.turn() !== playerColor) return false;
 }
 
-// ✅ 落子
+// ================= 落子 =================
 function onDrop(source, target) {
     var move = game.move({
         from: source,
@@ -157,32 +197,56 @@ function onDrop(source, target) {
     });
 }
 
-// ✅ 同步棋盤
-gameRef.on('value', snap => {
-    const data = snap.val();
-    if (data && data.fen) {
-        game.load(data.fen);
-        board.position(data.fen);
+// ================= 點擊下棋（🔥新） =================
+document.addEventListener("click", function(e){
+
+    let square = e.target.getAttribute("data-square");
+    if (!square) return;
+
+    if (!playerColor) return;
+
+    if (!selectedSquare) {
+        selectedSquare = square;
+    } else {
+
+        let move = game.move({
+            from: selectedSquare,
+            to: square,
+            promotion: 'q'
+        });
+
+        if (move) {
+            gameRef.update({
+                fen: game.fen(),
+                turn: game.turn()
+            });
+        }
+
+        selectedSquare = null;
+        board.position(game.fen());
     }
 });
 
-// ✅ 初始化
+// ================= 新遊戲 =================
 function newGame() {
     game.reset();
+
     gameRef.set({
         fen: game.fen(),
         turn: 'w',
         players: {}
     });
+
     playerColor = null;
 }
 
-// ✅ 聊天
+// ================= 聊天 =================
 function sendMessage() {
     let msg = document.getElementById("chat-input").value;
     if (!msg) return;
 
     chatRef.push({
+        name: playerName,
         msg: msg,
         time: Date.now()
     });
@@ -190,22 +254,16 @@ function sendMessage() {
     document.getElementById("chat-input").value = "";
 }
 
-chatRef.on('child_added', snap => {
-    let data = snap.val();
-    let div = document.createElement("div");
-    div.innerText = data.msg;
-    document.getElementById("chat-box").appendChild(div);
-});
-
-// ✅ 建立棋盤
+// ================= 棋盤 =================
 board = Chessboard('myBoard', {
     draggable: true,
     position: 'start',
+    pieceTheme: 'https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png',
     onDragStart: onDragStart,
     onDrop: onDrop
 });
 
-// 按鈕
+// ================= 按鈕 =================
 document.getElementById("new-game-btn").onclick = newGame;
 
 </script>
