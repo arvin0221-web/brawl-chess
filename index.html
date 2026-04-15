@@ -144,6 +144,10 @@
             <p id="game-status">載入中...</p>
             <div class="controls">
                 <button id="new-game-btn">開始新遊戲</button>
+                <div class="controls">
+    <button onclick="chooseColor('w')">選白棋</button>
+    <button onclick="chooseColor('b')">選黑棋</button>
+</div>
             </div>
         </div>
 
@@ -164,8 +168,39 @@
     <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
     <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
-
+ 
     <script>
+        let myId = "player_" + Math.random().toString(36).substr(2, 9);
+let playerColor = null;
+
+function chooseColor(color) {
+
+    const playersRef = db.ref('games/' + gameId + '/players');
+
+    playersRef.once('value', snap => {
+        const players = snap.val() || {};
+
+        if (color === 'w') {
+            if (!players.white || players.white === myId) {
+                playersRef.update({ white: myId });
+                playerColor = 'w';
+                alert("你選擇了白棋");
+            } else {
+                alert("白棋已被選走！");
+            }
+        }
+
+        if (color === 'b') {
+            if (!players.black || players.black === myId) {
+                playersRef.update({ black: myId });
+                playerColor = 'b';
+                alert("你選擇了黑棋");
+            } else {
+                alert("黑棋已被選走！");
+            }
+        }
+    });
+}
         // --- Firebase 配置 ---
         // 請務必替換為你自己的 Firebase 專案配置！
         // 你可以在 Firebase 控制台 -> 專案設定 -> 一般 -> 你的應用程式 找到這些資訊
@@ -262,7 +297,29 @@ window.db = db;
             }
             $status.html(status);
         }
+       function onDragStart (source, piece) {
 
+    if (game.game_over()) return false;
+
+    // ❗還沒選顏色不能動
+    if (!playerColor) {
+        alert("請先選擇白棋或黑棋！");
+        return false;
+    }
+
+    // ❗只能動自己的棋
+    if (
+        (playerColor === 'w' && piece.search(/^b/) !== -1) ||
+        (playerColor === 'b' && piece.search(/^w/) !== -1)
+    ) {
+        return false;
+    }
+
+    // ❗不是你的回合
+    if (game.turn() !== playerColor) {
+        return false;
+    }
+}
         // --- 棋盤配置 ---
         var boardConfig = {
             draggable: true,
@@ -285,25 +342,33 @@ window.db = db;
                 updateStatus(); // 每次有更新都更新狀態顯示
             } else {
                 // 如果是第一次載入或資料庫中沒有遊戲，則初始化
-                if (!snapshot.exists()) {
-                    initializeNewGame();
-                }
+               gameRef.once('value', snap => {
+    if (!snap.exists()) {
+        initializeNewGame();
+    }
+});
             }
         });
 
         function initializeNewGame() {
-            game.reset(); // 重置本地遊戲狀態
-            gameRef.set({ // 重置 Firebase 中的遊戲狀態
-                fen: game.fen(),
-                history: [],
-                turn: 'w',
-                chat: [
-                    {user: "系統", msg: "遊戲開始！", timestamp: Date.now()}
-                ]
-            });
-            board.position(game.fen()); // 確保棋盤顯示初始狀態
-        }
+    game.reset();
 
+    gameRef.set({
+        fen: game.fen(),
+        history: [],
+        turn: 'w',
+        players: {}, // ✅ 清空玩家
+        chat: [
+            {user: "系統", msg: "遊戲開始！", timestamp: Date.now()}
+        ]
+    });
+
+    playerColor = null; // ✅ 重置自己
+    board.position(game.fen());
+}
+setTimeout(() => {
+    alert("你是 " + (playerColor === 'w' ? "白棋" : "黑棋"));
+}, 1000);
         // --- 聊天功能 ---
         $('#send-chat-btn').on('click', function() {
             const message = $('#chat-input').val().trim();
