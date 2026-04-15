@@ -180,26 +180,24 @@ function chooseColor(color) {
     playersRef.once('value', snap => {
         const players = snap.val() || {};
 
-        if (color === 'w') {
-            if (!players.white || players.white === myId) {
-                playersRef.update({ white: myId });
-                playerColor = 'w';
-                alert("你選擇了白棋");
-            } else {
-                alert("白棋已被選走！");
-            }
-        }
+       if (color === 'w') {
+    if (!players.white || players.white === myId) {
+        playersRef.update({ white: myId });
+        playerColor = 'w';
+        alert("你是白棋");
+    } else {
+        alert("白棋已被選走！");
+    }
+}
 
-        if (color === 'b') {
-            if (!players.black || players.black === myId) {
-                playersRef.update({ black: myId });
-                playerColor = 'b';
-                alert("你選擇了黑棋");
-            } else {
-                alert("黑棋已被選走！");
-            }
-        }
-    });
+if (color === 'b') {
+    if (!players.black || players.black === myId) {
+        playersRef.update({ black: myId });
+        playerColor = 'b';
+        alert("你是黑棋");
+    } else {
+        alert("黑棋已被選走！");
+    }
 }
         // --- Firebase 配置 ---
         // 請務必替換為你自己的 Firebase 專案配置！
@@ -232,24 +230,6 @@ window.db = db;
         var board = null;
         var game = new Chess();
         var $status = $('#game-status');
-        var playerColor = 'w'; // 預設玩家顏色為白，在實際對戰中應動態分配
-
-        function onDragStart (source, piece, position, orientation) {
-            // 遊戲結束時禁止拖拽
-            if (game.game_over()) return false;
-
-            // 確保玩家只能拖拽自己顏色的棋子
-            // TODO: 在實際聯機遊戲中，需要判斷當前輪到誰下，以及本地玩家的顏色
-            if ((game.turn() === 'w' && piece.search(/^b/) !== -1) ||
-                (game.turn() === 'b' && piece.search(/^w/) !== -1)) {
-                return false;
-            }
-
-            // 如果不是輪到自己下棋，禁止拖拽
-            // TODO: 這裡需要知道當前玩家的顏色才能做判斷
-            // if (game.turn() !== playerColor) return false;
-        }
-
         function onDrop (source, target) {
             var move = game.move({
                 from: source,
@@ -275,7 +255,17 @@ window.db = db;
 
             // 本地狀態更新會透過 Firebase 監聽器觸發，所以這裡不需要直接調用 updateStatus()
         }
+        const playersRef = db.ref('games/' + gameId + '/players');
 
+playersRef.on('value', snap => {
+    const players = snap.val() || {};
+
+    if (players.white === myId) {
+        playerColor = 'w';
+    } else if (players.black === myId) {
+        playerColor = 'b';
+    }
+});
         // 棋子移動結束後，讓棋盤自動對齊，這是 Chessboard.js 的選項
         function onSnapEnd () {
             board.position(game.fen());
@@ -366,9 +356,7 @@ window.db = db;
     playerColor = null; // ✅ 重置自己
     board.position(game.fen());
 }
-setTimeout(() => {
-    alert("你是 " + (playerColor === 'w' ? "白棋" : "黑棋"));
-}, 1000);
+
         // --- 聊天功能 ---
         $('#send-chat-btn').on('click', function() {
             const message = $('#chat-input').val().trim();
