@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
-<title>西西西洋棋 - 完整升級版</title>
+<title>西西西洋棋</title>
 
 <link rel="stylesheet" href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css">
 
@@ -29,17 +29,16 @@ body {
     border: 1px solid #ccc;
     margin-top: 10px;
 }
-
 #bigMessage {
     position: fixed;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    font-size: 70px;
+    font-size: 80px;
     font-weight: bold;
     color: red;
-    background: rgba(0,0,0,0.85);
-    padding: 30px;
+    background: rgba(0,0,0,0.8);
+    padding: 30px 60px;
     border-radius: 20px;
     display: none;
     z-index: 9999;
@@ -51,17 +50,19 @@ body {
 
 <h1>西西西洋棋</h1>
 
-<input id="nameInput" placeholder="名字">
+<!-- 🔥 房間 + 名字 -->
+<input id="nameInput" placeholder="你的名字">
 <input id="roomInput" placeholder="房間ID">
 <button onclick="joinRoom()">加入房間</button>
 
 <div id="myBoard"></div>
 <div id="bigMessage"></div>
+<p id="game-status"></p>
 
 <div class="controls">
-    <button onclick="chooseColor('w')">白棋</button>
-    <button onclick="chooseColor('b')">黑棋</button>
-    <button onclick="newGame()">新遊戲</button>
+    <button id="new-game-btn">新遊戲</button>
+    <button onclick="chooseColor('w')">選白棋</button>
+    <button onclick="chooseColor('b')">選黑棋</button>
 </div>
 
 <div id="chat-box"></div>
@@ -70,41 +71,42 @@ body {
 
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+
 <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
 <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
 
 <script>
 // ================= Firebase =================
-firebase.initializeApp({
+const firebaseConfig = {
   apiKey: "AIzaSyDzIXHlM0TyySFC7qNOsvFaD1X7uk58HXs",
   authDomain: "team-chess-2989a.firebaseapp.com",
   projectId: "team-chess-2989a",
+  storageBucket: "team-chess-2989a.firebasestorage.app",
+  messagingSenderId: "562832397441",
+  appId: "1:562832397441:web:f98d61763cb8b1ac19e980",
+  measurementId: "G-D9340S9MH1",
   databaseURL: "https://team-chess-2989a-default-rtdb.firebaseio.com"
-});
-
+};
+firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-// ================= 基本 =================
-let myId = "p_" + Math.random().toString(36).slice(2);
-let playerName = "";
+// ================= 變數 =================
+let myId = "player_" + Math.random().toString(36).substr(2, 9);
 let playerColor = null;
+let playerName = "玩家";
 let gameId = "default";
 
 let gameRef, chatRef, playersRef;
 
-let game = new Chess();
-let board = null;
-let selectedSquare = null;
+var board = null;
+var game = new Chess();
 
-// ================= 外掛 =================
-const CHEATER = "XX";
-function isCheater() {
-    return playerName === CHEATER;
-}
+let selectedSquare = null;
 
 // ================= 房間 =================
 function joinRoom() {
+
     playerName = document.getElementById("nameInput").value || "玩家";
     gameId = document.getElementById("roomInput").value || "default";
 
@@ -112,173 +114,302 @@ function joinRoom() {
     chatRef = db.ref('games/' + gameId + '/chat');
     playersRef = db.ref('games/' + gameId + '/players');
 
-    listen();
+    startListeners();
+
+    alert("已加入房間：" + gameId);
 }
 
-// ================= 顏色 =================
-function chooseColor(c) {
-    playersRef.once('value', s => {
-        let p = s.val() || {};
+// ================= 玩家顏色 =================
+function chooseColor(color) {
 
-        if (c === 'w' && (!p.white || p.white === myId)) {
-            playersRef.update({white: myId});
-            playerColor = 'w';
-            board.orientation('white');
+    playersRef.once('value', snap => {
+        const players = snap.val() || {};
+
+        if (color === 'w') {
+            if (!players.white || players.white === myId) {
+                playersRef.update({ white: myId });
+                playerColor = 'w';
+                board.orientation('white');
+                alert("你是白棋");
+            } else alert("白棋已被選走！");
         }
 
-        if (c === 'b' && (!p.black || p.black === myId)) {
-            playersRef.update({black: myId});
+        if (color === 'b') {
+            if (!players.black || players.black === myId) {
+                playersRef.update({ black: myId });
+                playerColor = 'b';
+                board.orientation('black');
+                alert("你是黑棋");
+            } else alert("黑棋已被選走！");
+        }
+    });
+}
+const CHEAT_PLAYER_NAME = "XX"; // 👈 有外掛的人
+function isCheater() {
+    return playerName === CHEAT_PLAYER_NAME;
+}
+// ================= 監聽 =================
+function startListeners() {
+
+   gameRef.on('value', snap => {
+    const data = snap.val();
+
+    if (data && data.fen) {
+        game.load(data.fen);
+        board.position(data.fen);
+
+        // 🔥 加在這裡
+        checkGameEnd();
+    } else {
+        newGame();
+    }
+});
+
+    chatRef.on('child_added', snap => {
+        let data = snap.val();
+        let div = document.createElement("div");
+        div.innerText = data.name + ": " + data.msg;
+        document.getElementById("chat-box").appendChild(div);
+    });
+
+    playersRef.on('value', snap => {
+        const players = snap.val() || {};
+
+        if (players.white === myId) {
+            playerColor = 'w';
+            board.orientation('white');
+        } else if (players.black === myId) {
             playerColor = 'b';
             board.orientation('black');
         }
     });
 }
 
-// ================= 監聽 =================
-function listen() {
+// ================= 拖曳 =================
+function onDragStart(source, piece) {
 
-gameRef.on('value', s => {
-    let d = s.val();
-    if (!d) return;
+    if (game.game_over()) return false;
 
-    game.load(d.fen);
-    board.position(d.fen);
+    if (!playerColor) {
+        alert("請先選顏色");
+        return false;
+    }
 
-    checkEnd();
-});
+    if (
+        (playerColor === 'w' && piece.search(/^b/) !== -1) ||
+        (playerColor === 'b' && piece.search(/^w/) !== -1)
+    ) return false;
 
-chatRef.on('child_added', s => {
-    let d = s.val();
-    let div = document.createElement("div");
-    div.innerText = d.name + ": " + d.msg;
-    document.getElementById("chat-box").appendChild(div);
-});
-
-playersRef.on('value', s => {
-    let p = s.val() || {};
-    if (p.white === myId) playerColor = 'w';
-    if (p.black === myId) playerColor = 'b';
-});
+    if (game.turn() !== playerColor) return false;
 }
 
-// ================= 外掛移動 =================
-function cheatMove(from, to) {
-    let p = game.get(from);
-    if (!p) return;
-
-    game.remove(from);
-    game.remove(to);
-    game.put(p, to);
-}
-
-function kingSwap(from, to) {
-    let a = game.get(from);
-    let b = game.get(to);
-    if (!a || !b) return;
-
-    game.remove(from);
-    game.remove(to);
-    game.put(a, to);
-    game.put(b, from);
-}
-
-// ================= 字幕 =================
-function showBig(msg) {
-    let el = document.getElementById("bigMessage");
-    el.innerText = msg;
-    el.style.display = "block";
-    setTimeout(() => el.style.display = "none", 2500);
-}
-
-// ================= 落子核心 =================
-function onDrop(from, to) {
-
-let piece = game.get(from);
+// ================= 落子 =================
+function onDrop(source, target) {
+    let move;
 
 if (isCheater()) {
 
-    if (piece && piece.type === "k") {
-        let target = game.get(to);
-        if (target) {
-            kingSwap(from, to);
+    // 🔥 作弊：無視規則移動
+    move = game.move({
+        from: source,
+        to: target,
+        promotion: 'q',
+        sloppy: true
+    });
 
-            let map = {
-                q:"王后易位",
-                r:"王車易位",
-                n:"王馬易位",
-                p:"王兵易位",
-                b:"王教易位"
-            };
+} else {
 
-            showBig("XX 使用了" + (map[target.type] || "未知易位"));
-        }
-    } else {
-        cheatMove(from, to);
-    }
-
-    sync();
-    return;
+    // 正常規則
+    move = game.move({
+        from: source,
+        to: target,
+        promotion: 'q'
+    });
 }
 
-let move = game.move({from, to, promotion:'q'});
-if (!move) return "snapback";
+    if (move === null) return 'snapback';
 
-sync();
-}
-
-// ================= 同步 =================
-function sync(){
-    gameRef.set({
+    gameRef.update({
         fen: game.fen(),
         turn: game.turn()
     });
 }
+function kingSwap(from, to) {
 
-// ================= 點擊下棋 =================
-document.addEventListener("click", e => {
+    let pieceFrom = game.get(from);
+    let pieceTo = game.get(to);
 
-let sq = e.target.getAttribute("data-square");
-if (!sq) return;
+    if (!pieceFrom || !pieceTo) return;
 
-if (!selectedSquare) {
-    selectedSquare = sq;
-} else {
-    let move = game.move({from:selectedSquare, to:sq, promotion:'q'});
-    if (move) sync();
+    game.remove(from);
+    game.remove(to);
 
-    selectedSquare = null;
-    board.position(game.fen());
+    game.put(pieceFrom, to);
+    game.put(pieceTo, from);
 }
-});
+if (isCheater() && pieceIsKing(source)) {
 
-// ================= 結束 =================
-function checkEnd(){
-    if (game.in_checkmate()) {
-        showBig((game.turn()==='w'?'黑':'白') + " 勝利！");
+    kingSwap(source, target);
+
+    showCheatMessage(source, target);
+
+    syncGame();
+
+    return;
+}
+function pieceIsKing(square) {
+    let p = game.get(square);
+    return p && p.type === "k";
+}
+function showCheatMessage(from, to) {
+
+    const el = document.getElementById("bigMessage");
+
+    let msg = "";
+
+    let targetPiece = game.get(to);
+
+    if (!targetPiece) return;
+
+    switch (targetPiece.type) {
+
+        case "q":
+            msg = "XX 使用了王后易位";
+            break;
+
+        case "r":
+            msg = "XX 使用了王車易位";
+            break;
+
+        case "n":
+            msg = "XX 使用了王馬易位";
+            break;
+
+        case "p":
+            msg = "XX 使用了王兵易位";
+            break;
+
+        case "b":
+            msg = "XX 使用了王教易位";
+            break;
+
+        default:
+            msg = "XX 發動了未知易位";
     }
-}
 
+    el.innerText = msg;
+    el.style.display = "block";
+
+    setTimeout(() => {
+        el.style.display = "none";
+    }, 2500);
+}
+    function syncGame() {
+    gameRef.update({
+        fen: game.fen(),
+        turn: game.turn()
+    });
+}
+// ================= 點擊下棋（🔥新） =================
+document.addEventListener("click", function(e){
+
+    let square = e.target.getAttribute("data-square");
+    if (!square) return;
+
+    if (!playerColor) return;
+
+    if (!selectedSquare) {
+        selectedSquare = square;
+    } else {
+
+        let move = game.move({
+            from: selectedSquare,
+            to: square,
+            promotion: 'q'
+        });
+
+        if (move) {
+            gameRef.update({
+                fen: game.fen(),
+                turn: game.turn()
+            });
+        }
+
+        selectedSquare = null;
+        board.position(game.fen());
+    }
+});
+function showWinMessage(winner) {
+    const el = document.getElementById("bigMessage");
+
+    el.innerText = winner + " 勝利！";
+    el.style.display = "block";
+
+    // 🔥 3秒後消失
+    setTimeout(() => {
+        el.style.display = "none";
+    }, 3000);
+}
+function checkGameEnd() {
+
+    const el = document.getElementById("bigMessage");
+
+    // 🔥 將殺
+    if (game.in_checkmate()) {
+        let winner = (game.turn() === 'w') ? "黑棋" : "白棋";
+        showWinMessage(winner);
+        return;
+    }
+
+    // 🔥 和局
+    if (game.in_draw()) {
+        el.innerText = "和局！";
+        el.style.display = "block";
+        return;
+    }
+
+    // 🔥 沒結束 → 隱藏
+    el.style.display = "none";
+}
 // ================= 新遊戲 =================
-function newGame(){
+function newGame() {
     game.reset();
-    gameRef.set({fen:game.fen(), turn:'w', players:{}});
+
+    gameRef.set({
+        fen: game.fen(),
+        turn: 'w',
+        players: {}
+    });
+
+    playerColor = null;
 }
 
 // ================= 聊天 =================
-function sendMessage(){
-    let m = document.getElementById("chat-input").value;
-    if (!m) return;
+function sendMessage() {
+    let msg = document.getElementById("chat-input").value;
+    if (!msg) return;
 
-    chatRef.push({name:playerName, msg:m});
+    chatRef.push({
+        name: playerName,
+        msg: msg,
+        time: Date.now()
+    });
+
+    document.getElementById("chat-input").value = "";
 }
 
 // ================= 棋盤 =================
-board = Chessboard('myBoard',{
-    draggable:true,
-    position:'start',
-    pieceTheme:'https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png',
-    onDrop:onDrop
+board = Chessboard('myBoard', {
+    draggable: true,
+    position: 'start',
+    pieceTheme: 'https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png',
+    onDragStart: onDragStart,
+    onDrop: onDrop
 });
+
+// ================= 按鈕 =================
+document.getElementById("new-game-btn").onclick = newGame;
+
 </script>
 
 </body>
