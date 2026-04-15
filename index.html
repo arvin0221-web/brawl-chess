@@ -247,17 +247,35 @@ document.addEventListener("click", function(e){
 });
 function showWinMessage(winner) {
     const el = document.getElementById("bigMessage");
+
     el.innerText = winner + " 勝利！";
     el.style.display = "block";
+
+    // 🔥 3秒後消失
+    setTimeout(() => {
+        el.style.display = "none";
+    }, 3000);
 }
 function checkGameEnd() {
 
+    const el = document.getElementById("bigMessage");
+
+    // 🔥 將殺
     if (game.in_checkmate()) {
-
         let winner = (game.turn() === 'w') ? "黑棋" : "白棋";
-
         showWinMessage(winner);
+        return;
     }
+
+    // 🔥 和局
+    if (game.in_draw()) {
+        el.innerText = "和局！";
+        el.style.display = "block";
+        return;
+    }
+
+    // 🔥 沒結束 → 隱藏
+    el.style.display = "none";
 }
 // ================= 新遊戲 =================
 function newGame() {
