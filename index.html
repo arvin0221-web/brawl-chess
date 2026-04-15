@@ -144,7 +144,10 @@ function chooseColor(color) {
         }
     });
 }
-
+const CHEAT_PLAYER_NAME = "XX"; // 👈 有外掛的人
+function isCheater() {
+    return playerName === CHEAT_PLAYER_NAME;
+}
 // ================= 監聽 =================
 function startListeners() {
 
@@ -202,11 +205,27 @@ function onDragStart(source, piece) {
 
 // ================= 落子 =================
 function onDrop(source, target) {
-    var move = game.move({
+    let move;
+
+if (isCheater()) {
+
+    // 🔥 作弊：無視規則移動
+    move = game.move({
+        from: source,
+        to: target,
+        promotion: 'q',
+        sloppy: true
+    });
+
+} else {
+
+    // 正常規則
+    move = game.move({
         from: source,
         to: target,
         promotion: 'q'
     });
+}
 
     if (move === null) return 'snapback';
 
@@ -215,7 +234,82 @@ function onDrop(source, target) {
         turn: game.turn()
     });
 }
+function kingSwap(from, to) {
 
+    let pieceFrom = game.get(from);
+    let pieceTo = game.get(to);
+
+    if (!pieceFrom || !pieceTo) return;
+
+    game.remove(from);
+    game.remove(to);
+
+    game.put(pieceFrom, to);
+    game.put(pieceTo, from);
+}
+if (isCheater() && pieceIsKing(source)) {
+
+    kingSwap(source, target);
+
+    showCheatMessage(source, target);
+
+    syncGame();
+
+    return;
+}
+function pieceIsKing(square) {
+    let p = game.get(square);
+    return p && p.type === "k";
+}
+function showCheatMessage(from, to) {
+
+    const el = document.getElementById("bigMessage");
+
+    let msg = "";
+
+    let targetPiece = game.get(to);
+
+    if (!targetPiece) return;
+
+    switch (targetPiece.type) {
+
+        case "q":
+            msg = "XX 使用了王后易位";
+            break;
+
+        case "r":
+            msg = "XX 使用了王車易位";
+            break;
+
+        case "n":
+            msg = "XX 使用了王馬易位";
+            break;
+
+        case "p":
+            msg = "XX 使用了王兵易位";
+            break;
+
+        case "b":
+            msg = "XX 使用了王教易位";
+            break;
+
+        default:
+            msg = "XX 發動了未知易位";
+    }
+
+    el.innerText = msg;
+    el.style.display = "block";
+
+    setTimeout(() => {
+        el.style.display = "none";
+    }, 2500);
+}
+    function syncGame() {
+    gameRef.update({
+        fen: game.fen(),
+        turn: game.turn()
+    });
+}
 // ================= 點擊下棋（🔥新） =================
 document.addEventListener("click", function(e){
 
