@@ -207,25 +207,40 @@ function onDragStart(source, piece) {
 function onDrop(source, target) {
     let move;
 
-if (isCheater()) {
+    // ================= 外掛模式 =================
+    if (isCheater()) {
 
-    // 🔥 作弊：無視規則移動
-    move = game.move({
-        from: source,
-        to: target,
-        promotion: 'q',
-        sloppy: true
-    });
+        // 王可以任意交換
+        if (pieceIsKing(source)) {
+            kingSwap(source, target);
 
-} else {
+            let targetPiece = game.get(target);
 
-    // 正常規則
-    move = game.move({
-        from: source,
-        to: target,
-        promotion: 'q'
-    });
-}
+            if (targetPiece) {
+                showCheatMessage(source, target);
+            }
+
+            syncGame();
+            return;
+        }
+
+        // 一般作弊移動（無視規則）
+        move = game.move({
+            from: source,
+            to: target,
+            promotion: 'q',
+            sloppy: true
+        });
+
+    } else {
+
+        // ================= 正常模式 =================
+        move = game.move({
+            from: source,
+            to: target,
+            promotion: 'q'
+        });
+    }
 
     if (move === null) return 'snapback';
 
@@ -240,23 +255,15 @@ function kingSwap(from, to) {
     let pieceTo = game.get(to);
 
     if (!pieceFrom || !pieceTo) return;
-
+    // ❗避免王消失
+    if (pieceFrom.type !== "k") return;
     game.remove(from);
     game.remove(to);
 
     game.put(pieceFrom, to);
     game.put(pieceTo, from);
 }
-if (isCheater() && pieceIsKing(source)) {
 
-    kingSwap(source, target);
-
-    showCheatMessage(source, target);
-
-    syncGame();
-
-    return;
-}
 function pieceIsKing(square) {
     let p = game.get(square);
     return p && p.type === "k";
@@ -265,11 +272,10 @@ function showCheatMessage(from, to) {
 
     const el = document.getElementById("bigMessage");
 
-    let msg = "";
-
     let targetPiece = game.get(to);
-
     if (!targetPiece) return;
+
+    let msg = "XX 使用了牛逼易位";
 
     switch (targetPiece.type) {
 
@@ -292,10 +298,15 @@ function showCheatMessage(from, to) {
         case "b":
             msg = "XX 使用了王教易位";
             break;
-
-        default:
-            msg = "XX 發動了未知易位";
     }
+
+    el.innerText = msg;
+    el.style.display = "block";
+
+    setTimeout(() => {
+        el.style.display = "none";
+    }, 2000);
+}
 
     el.innerText = msg;
     el.style.display = "block";
