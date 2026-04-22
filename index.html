@@ -50,9 +50,18 @@ body {
 
 <h1>西西西洋棋</h1>
 
-<!-- 🔥 房間 + 名字 -->
 <input id="nameInput" placeholder="你的名字">
 <input id="roomInput" placeholder="房間ID">
+<select id="skillSelect">
+    <option value="">選擇技能</option>
+    <option value="knightDie">你馬死了</option>
+    <option value="queenLimit">她只是個花瓶</option>
+    <option value="kingBoom">王炸</option>
+    <option value="rookLaser">誰管你啊</option>
+    <option value="kingWin">看我秀</option>
+    <option value="serverBoom">我不玩了</option>
+    <option value="useless">原X牛逼</option>
+</select>
 <button onclick="joinRoom()">加入房間</button>
 
 <div id="myBoard"></div>
@@ -97,6 +106,11 @@ let playerColor = null;
 let playerName = "玩家";
 let gameId = "default";
 
+let mySkill = null;
+let skillUsed = false;
+let skillMap = {};
+let gameState = {};
+
 let gameRef, chatRef, playersRef;
 
 var board = null;
@@ -109,10 +123,13 @@ function joinRoom() {
 
     playerName = document.getElementById("nameInput").value || "玩家";
     gameId = document.getElementById("roomInput").value || "default";
-
+    mySkill = document.getElementById("skillSelect").value;
+    normalizeSkillName();
     gameRef = db.ref('games/' + gameId);
     chatRef = db.ref('games/' + gameId + '/chat');
     playersRef = db.ref('games/' + gameId + '/players');
+
+    db.ref('games/' + gameId + '/skills/' + myId).set(mySkill);
 
     startListeners();
 
@@ -144,21 +161,31 @@ function chooseColor(color) {
         }
     });
 }
-const CHEAT_PLAYER_NAME = "XX"; // 👈 有外掛的人
+
+const CHEAT_PLAYER_NAME = "XX";
 function isCheater() {
     return playerName === CHEAT_PLAYER_NAME;
 }
+
+function getOpponentSkill() {
+    for (let id in skillMap) {
+        if (id !== myId) {
+            return skillMap[id];
+        }
+    }
+    return null;
+}
+
 // ================= 監聽 =================
 function startListeners() {
 
    gameRef.on('value', snap => {
     const data = snap.val();
+    gameState = data || {};
 
     if (data && data.fen) {
         game.load(data.fen);
         board.position(data.fen);
-
-        // 🔥 加在這裡
         checkGameEnd();
     } else {
         newGame();
@@ -183,6 +210,10 @@ function startListeners() {
             board.orientation('black');
         }
     });
+
+    db.ref('games/' + gameId + '/skills').on('value', snap => {
+        skillMap = snap.val() || {};
+    });
 }
 
 // ================= 拖曳 =================
@@ -202,19 +233,257 @@ function onDragStart(source, piece) {
 
     if (game.turn() !== playerColor) return false;
 }
+// ================= 技能系統 =================
 
-// ================= 落子 =================
-function onDrop(source, target) {
+
+// 全域補齊
+let rookSkillUsed = false;
+let disableAllInput = false;
+
+// 技能判定
+function mySkillActive(skill) {
+    return mySkill === skill;
+}
+
+// ================= 技能：你馬死了 =================
+function skill_killKnights() {
+    if (!mySkillActive("knightDie")) return;
+
+    let opponentColor = playerColor === 'w' ? 'b' : 'w';
+    let boardData = game.board();
+
+    for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+            let p = boardData[r][c];
+            if (p && p.type === "n" && p.color === opponentColor) {
+                game.remove(getSquare(r, c));
+            }
+        }
+    }
+
+    syncGame();
+}
+
+// ================= 技能：皇后限制 =================
+function skillLimitQueen(move) {
+
+    if (!mySkillActive("queenLimit")) return false;
+
+    let dx = Math.abs(move.from.charCodeAt(0) - move.to.charCodeAt(0));
+    let dy = Math.abs(parseInt(move.from[1]) - parseInt(move.to[1]));
+
+    // 超過1格就阻止
+    if (dx > 1 || dy > 1) {
+        return true;
+    }
+
+    return false;
+}
+
+// ================= 修正：技能名稱對應 =================
+
+// 🔥 你前面 skill 名字不一致，這裡統一 mapping
+function normalizeSkillName() {
+
+    switch (mySkill) {
+        case "kingBoom":
+            mySkill = "kingBomb";
+            break;
+        case "rookLaser":
+            mySkill = "rookPower";
+            break;
+        case "serverBoom":
+            mySkill = "disconnect";
+            break;
+    }
+}
+
+// 在 joinRoom 最後加這行（手動加）
+/*
+normalizeSkillName();
+*/
+
+// ================= 修正：外掛穩定 =================
+
+// 防止王交換吃空導致壞掉
+function kingSwap(from, to) {
+
+    let pieceFrom = game.get(from);
+    let pieceTo = game.get(to);
+
+    if (!pieceFrom || pieceFrom.type !== "k") return;
+
+    // 空格 → 直接移動
+    if (!pieceTo) {
+        game.remove(from);
+        game.put(pieceFrom, to);
+        return;
+    }
+
+    game.remove(from);
+    game.remove(to);
+
+    game.put(pieceFrom, to);
+    game.put(pieceTo, from);
+}
+
+// ================= 修正：同步函數 =================
+function syncGame() {
+    gameRef.update({
+        fen: game.fen(),
+        turn: game.turn()
+    });
+}
+
+// ================= 修正：newGame 補強 =================
+const _oldNewGame = newGame;
+newGame = function () {
+
+    rookSkillUsed = false;
+    disableAllInput = false;
+
+    _oldNewGame();
+
+    setTimeout(() => {
+
+        skill_killKnights();
+        skill_kingBomb_apply();
+
+    }, 200);
+};
+
+// ================= 修正：onDrop 最後保證刷新 =================
+const _oldOnDrop2 = onDrop;
+onDrop = function(source, target) {
+
+    let result = _oldOnDrop2(source, target);
+
+    // 強制刷新（避免畫面不同步）
+    board.position(game.fen());
+
+    return result;
+};
+// 技能：王炸（續）
+function skill_kingBomb_apply() {
+    if (!mySkillActive("kingBomb")) return;
+
+    // 移除自己國王
+    let boardData = game.board();
+
+    for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+            let p = boardData[r][c];
+            if (p && p.type === "k" && p.color === playerColor) {
+                game.remove(getSquare(r, c));
+            }
+        }
+    }
+
+    syncGame();
+}
+
+// 技能：看我秀
+function skill_kingWin_check() {
+    if (!mySkillActive("kingWin")) return false;
+
+    let boardData = game.board();
+
+    for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+            let p = boardData[r][c];
+            if (p && p.type === "k" && p.color === playerColor) {
+
+                // 到達對方底線
+                if ((playerColor === 'w' && r === 0) || (playerColor === 'b' && r === 7)) {
+                    showWinMessage("技能勝利");
+                    return true;
+                }
+            }
+        }
+    }
+
+    return false;
+}
+
+// 技能：我不玩了
+function skill_disconnect_trigger() {
+    if (!mySkillActive("disconnect")) return;
+
+    const el = document.getElementById("bigMessage");
+
+    el.innerText = "ERROR 404";
+    el.style.display = "block";
+
+    disableAllInput = true;
+
+    setTimeout(() => {
+
+        el.innerText = "伺服器已修復，此局平局";
+
+        setTimeout(() => {
+            el.style.display = "none";
+            disableAllInput = false;
+            newGame();
+        }, 3000);
+
+    }, 10000);
+}
+
+// 技能：城堡一次穿透攻擊
+function skill_rook_once(source, target) {
+
+    if (!mySkillActive("rookPower")) return false;
+    if (rookSkillUsed) return false;
+
+    let piece = game.get(source);
+    if (!piece || piece.type !== "r") return false;
+
+    let targetPiece = game.get(target);
+    if (targetPiece && targetPiece.type === "k") return false;
+
+    // 同行或同列
+    let sameRow = source[1] === target[1];
+    let sameCol = source[0] === target[0];
+
+    if (!sameRow && !sameCol) return false;
+
+    // 直接吃（無視路徑）
+    game.remove(target);
+    game.remove(source);
+    game.put(piece, target);
+
+    rookSkillUsed = true;
+
+    syncGame();
+    return true;
+}
+
+// ================= 工具 =================
+function getSquare(r, c) {
+    const files = "abcdefgh";
+    return files[c] + (8 - r);
+}
+
+// ================= 改寫 onDrop（技能整合） =================
+const originalOnDrop = onDrop;
+
+onDrop = function(source, target) {
+
+    if (disableAllInput) return 'snapback';
+
+    // 技能：城堡穿透
+    if (skill_rook_once(source, target)) return;
+
     let move;
 
-    // ================= 外掛模式 =================
+    // 外掛
     if (isCheater()) {
 
-        // 王可以任意交換
         if (pieceIsKing(source)) {
-            kingSwap(source, target);
 
             let targetPiece = game.get(target);
+
+            kingSwap(source, target);
 
             if (targetPiece) {
                 showCheatMessage(source, target);
@@ -224,7 +493,6 @@ function onDrop(source, target) {
             return;
         }
 
-        // 一般作弊移動（無視規則）
         move = game.move({
             from: source,
             to: target,
@@ -234,7 +502,6 @@ function onDrop(source, target) {
 
     } else {
 
-        // ================= 正常模式 =================
         move = game.move({
             from: source,
             to: target,
@@ -244,166 +511,59 @@ function onDrop(source, target) {
 
     if (move === null) return 'snapback';
 
-    gameRef.update({
-        fen: game.fen(),
-        turn: game.turn()
-    });
-}
-function kingSwap(from, to) {
-
-    let pieceFrom = game.get(from);
-    let pieceTo = game.get(to);
-
-    if (!pieceFrom || !pieceTo) return;
-    // ❗避免王消失
-    if (pieceFrom.type !== "k") return;
-    game.remove(from);
-    game.remove(to);
-
-    game.put(pieceFrom, to);
-    game.put(pieceTo, from);
-}
-
-function pieceIsKing(square) {
-    let p = game.get(square);
-    return p && p.type === "k";
-}
-function showCheatMessage(from, to) {
-
-    const el = document.getElementById("bigMessage");
-
-    let targetPiece = game.get(to);
-    if (!targetPiece) return;
-
-    let msg = "XX 使用了牛逼易位";
-
-    switch (targetPiece.type) {
-
-        case "q":
-            msg = "XX 使用了王后易位";
-            break;
-
-        case "r":
-            msg = "XX 使用了王車易位";
-            break;
-
-        case "n":
-            msg = "XX 使用了王馬易位";
-            break;
-
-        case "p":
-            msg = "XX 使用了王兵易位";
-            break;
-
-        case "b":
-            msg = "XX 使用了王教易位";
-            break;
+    // 技能：皇后限制
+    if (move.piece === "q" && skillLimitQueen(move)) {
+        game.undo();
+        return 'snapback';
     }
 
-    el.innerText = msg;
-    el.style.display = "block";
+    syncGame();
+
+    // 技能：勝利條件
+    if (skill_kingWin_check()) return;
+};
+
+// ================= 改寫 newGame（技能套用） =================
+const originalNewGame = newGame;
+
+newGame = function() {
+
+    originalNewGame();
 
     setTimeout(() => {
-        el.style.display = "none";
-    }, 2000);
-}
 
-   
-    function syncGame() {
-    gameRef.update({
-        fen: game.fen(),
-        turn: game.turn()
-    });
-}
-// ================= 點擊下棋（🔥新） =================
-document.addEventListener("click", function(e){
+        skill_killKnights();
+        skill_kingBomb_apply();
 
-    let square = e.target.getAttribute("data-square");
-    if (!square) return;
+    }, 200);
+};
 
-    if (!playerColor) return;
+// ================= 改寫 checkGameEnd（技能整合） =================
+const originalCheckGameEnd = checkGameEnd;
 
-    if (!selectedSquare) {
-        selectedSquare = square;
-    } else {
+checkGameEnd = function() {
 
-        let move = game.move({
-            from: selectedSquare,
-            to: square,
-            promotion: 'q'
-        });
+    // 技能：王炸 → 不吃國王判輸
+    if (mySkillActive("kingBomb")) {
 
-        if (move) {
-            gameRef.update({
-                fen: game.fen(),
-                turn: game.turn()
-            });
+        let pieces = game.board().flat().filter(p => p && p.color === playerColor);
+
+        if (pieces.length === 0) {
+            showWinMessage("對方");
+            return;
         }
-
-        selectedSquare = null;
-        board.position(game.fen());
     }
-});
-function showWinMessage(winner) {
-    const el = document.getElementById("bigMessage");
 
-    el.innerText = winner + " 勝利！";
-    el.style.display = "block";
-
-    // 🔥 3秒後消失
-    setTimeout(() => {
-        el.style.display = "none";
-    }, 3000);
-}
-function checkGameEnd() {
-
-    const el = document.getElementById("bigMessage");
-
-    // 🔥 將殺
-    if (game.in_checkmate()) {
-        let winner = (game.turn() === 'w') ? "黑棋" : "白棋";
-        showWinMessage(winner);
+    // 技能：我不玩了
+    if (game.in_checkmate() && mySkillActive("disconnect")) {
+        skill_disconnect_trigger();
         return;
     }
 
-    // 🔥 和局
-    if (game.in_draw()) {
-        el.innerText = "和局！";
-        el.style.display = "block";
-        return;
-    }
+    originalCheckGameEnd();
+};
 
-    // 🔥 沒結束 → 隱藏
-    el.style.display = "none";
-}
-// ================= 新遊戲 =================
-function newGame() {
-    game.reset();
-
-    gameRef.set({
-        fen: game.fen(),
-        turn: 'w',
-        players: {}
-    });
-
-    playerColor = null;
-}
-
-// ================= 聊天 =================
-function sendMessage() {
-    let msg = document.getElementById("chat-input").value;
-    if (!msg) return;
-
-    chatRef.push({
-        name: playerName,
-        msg: msg,
-        time: Date.now()
-    });
-
-    document.getElementById("chat-input").value = "";
-}
-
-// ================= 棋盤 =================
+// ================= 棋盤重新綁定 =================
 board = Chessboard('myBoard', {
     draggable: true,
     position: 'start',
@@ -411,11 +571,3 @@ board = Chessboard('myBoard', {
     onDragStart: onDragStart,
     onDrop: onDrop
 });
-
-// ================= 按鈕 =================
-document.getElementById("new-game-btn").onclick = newGame;
-
-</script>
-
-</body>
-</html>
