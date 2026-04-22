@@ -352,17 +352,7 @@ newGame = function () {
     }, 200);
 };
 
-// ================= 修正：onDrop 最後保證刷新 =================
-const _oldOnDrop2 = onDrop;
-onDrop = function(source, target) {
 
-    let result = _oldOnDrop2(source, target);
-
-    // 強制刷新（避免畫面不同步）
-    board.position(game.fen());
-
-    return result;
-};
 // 技能：王炸（續）
 function skill_kingBomb_apply() {
     if (!mySkillActive("kingBomb")) return;
@@ -522,21 +512,8 @@ onDrop = function(source, target) {
     // 技能：勝利條件
     if (skill_kingWin_check()) return;
 };
+board.position(game.fen());
 
-// ================= 改寫 newGame（技能套用） =================
-const originalNewGame = newGame;
-
-newGame = function() {
-
-    originalNewGame();
-
-    setTimeout(() => {
-
-        skill_killKnights();
-        skill_kingBomb_apply();
-
-    }, 200);
-};
 
 // ================= 改寫 checkGameEnd（技能整合） =================
 const originalCheckGameEnd = checkGameEnd;
