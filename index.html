@@ -935,7 +935,7 @@ body {
 <div class="modal-overlay" id="skill-modal">
   <div class="modal-box" style="max-width:520px">
     <div class="modal-title">選擇你的技能</div>
-    <div class="modal-sub">選擇2個技能帶入這場對局</div>
+    <div class="modal-sub">選擇1個技能帶入這場對局</div>
     <div class="skill-pick-grid" id="skill-pick-grid"></div>
     <button class="btn btn-gold" onclick="confirmSkills()" style="margin-top:8px">確認技能</button>
   </div>
@@ -989,44 +989,7 @@ const PIECES = {
 
 // Skills definition
 const SKILLS_DATA = {
-  // ── 原版技能 ──
-  teleport: {
-    name:'傳送',icon:'⚡',
-    desc:'將己方任一棋子傳送到空格（不能傳送到有棋子的格子）',
-    cooldown:5, type:'select-src-then-dest'
-  },
-  freeze: {
-    name:'冰凍',icon:'❄️',
-    desc:'冰凍敵方一個棋子，使其一回合無法移動',
-    cooldown:4, type:'select-enemy'
-  },
-  shield: {
-    name:'護盾',icon:'🛡️',
-    desc:'賦予己方棋子一回合護盾，被攻擊時不被吃掉',
-    cooldown:5, type:'select-own'
-  },
-  clone: {
-    name:'複製',icon:'🔮',
-    desc:'在空格上複製己方一個兵的複本（最多存在3回合）',
-    cooldown:6, type:'select-own-pawn'
-  },
-  swap: {
-    name:'交換',icon:'🔄',
-    desc:'交換棋盤上任意兩個己方棋子的位置',
-    cooldown:4, type:'select-two-own'
-  },
-  haste: {
-    name:'急速',icon:'💨',
-    desc:'你的棋子本回合可以再移動一次（連走兩步）',
-    cooldown:5, type:'instant'
-  },
-  explode: {
-    name:'爆炸',icon:'💥',
-    desc:'消除選定空格周圍3x3範圍內所有棋子（包含己方）',
-    cooldown:7, type:'select-any-sq'
-  },
-
-  // ── 特殊技能 ──
+ 
   horse_die: {
     name:'你馬死了',icon:'☠️',
     desc:'對方雙馬開局暴斃',
