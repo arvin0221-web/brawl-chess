@@ -2,2346 +2,1079 @@
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>技能西洋棋 Skill Chess</title>
-<link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700;900&family=Crimson+Pro:ital,wght@0,300;0,400;0,600;1,400&family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>技能西洋棋</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Cinzel+Decorative:wght@700&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <style>
-:root {
-  --gold: #c9a84c;
-  --gold-light: #e8c97a;
-  --gold-dark: #8b6914;
-  --deep: #0a0a0f;
-  --surface: #12121a;
-  --surface2: #1c1c2a;
-  --surface3: #252535;
-  --border: #2e2e45;
-  --text: #e8e0d0;
-  --text-dim: #8a8070;
-  --white-sq: #f0d9b5;
-  --black-sq: #b58863;
-  --highlight: rgba(255, 220, 50, 0.45);
-  --danger: #c0392b;
-  --skill-blue: #4a9eff;
-  --skill-purple: #9b59b6;
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+:root{
+  --bg:#0d0d14;--panel:#161622;--panel2:#1e1e2e;--border:#2a2a40;
+  --gold:#c9a84c;--gold2:#e8c97a;--text:#e8e0d0;--dim:#7a7068;
+  --sq-l:#eeeed2;--sq-d:#769656;
+  --hi:rgba(255,220,40,0.5);--sel:rgba(20,180,255,0.45);
+  --last:rgba(255,200,0,0.28);--chk:rgba(220,40,40,0.6);
+  --blue:#4a9eff;--red:#e05050;
 }
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-serif;}
+.scr{display:none;width:100%;height:100%;}
+.scr.on{display:flex;}
 
-* { margin: 0; padding: 0; box-sizing: border-box; }
+/* ── LOBBY ── */
+#lobby{flex-direction:column;align-items:center;justify-content:center;padding:24px 16px;overflow-y:auto;gap:0;}
+.logo{font-family:'Cinzel Decorative',serif;font-size:clamp(24px,5vw,40px);background:linear-gradient(135deg,var(--gold2),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;text-align:center;margin-bottom:4px;}
+.logo-sub{color:var(--dim);font-size:12px;text-align:center;letter-spacing:.2em;margin-bottom:24px;}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:24px;width:100%;max-width:380px;position:relative;}
+.card::before{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:60%;height:1px;background:linear-gradient(90deg,transparent,var(--gold),transparent);}
+.lbl{display:block;font-size:11px;letter-spacing:.15em;color:var(--dim);margin-bottom:6px;text-transform:uppercase;}
+.fi{width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:11px 14px;color:var(--text);font-size:15px;font-family:inherit;outline:none;transition:border-color .2s;}
+.fi:focus{border-color:var(--gold);}
+.mg{margin-bottom:14px;}
+.btn{width:100%;padding:13px;border:none;border-radius:8px;font-size:14px;font-family:inherit;font-weight:500;cursor:pointer;transition:all .18s;letter-spacing:.04em;}
+.btn-g{background:linear-gradient(135deg,#7a5c10,var(--gold));color:#1a1000;margin-bottom:10px;}
+.btn-g:hover{filter:brightness(1.12);}
+.btn-o{background:transparent;border:1px solid var(--border);color:var(--text);}
+.btn-o:hover{border-color:var(--gold);color:var(--gold2);}
+.div{display:flex;align-items:center;gap:10px;margin:16px 0;color:var(--dim);font-size:12px;}
+.div::before,.div::after{content:'';flex:1;height:1px;background:var(--border);}
 
-body {
-  background: var(--deep);
-  color: var(--text);
-  font-family: 'Noto Sans TC', sans-serif;
-  min-height: 100vh;
-  overflow-x: hidden;
-  background-image:
-    radial-gradient(ellipse at 20% 20%, rgba(201,168,76,0.06) 0%, transparent 50%),
-    radial-gradient(ellipse at 80% 80%, rgba(74,158,255,0.04) 0%, transparent 50%);
-}
+/* ── GAME ── */
+#game{flex-direction:column;height:100%;overflow:hidden;}
+.topbar{display:flex;align-items:center;padding:7px 10px;background:var(--panel);border-bottom:1px solid var(--border);flex-shrink:0;gap:6px;min-height:44px;}
+.tb-p{display:flex;align-items:center;gap:5px;flex:1;min-width:0;}
+.tb-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+.tb-name{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:70px;}
+.tb-sk{font-size:10px;padding:2px 6px;border-radius:20px;border:1px solid var(--border);background:var(--panel2);white-space:nowrap;flex-shrink:0;}
+.tb-turn{font-size:12px;font-weight:700;text-align:center;flex-shrink:0;min-width:80px;color:var(--gold2);}
+.tb-leave{background:none;border:1px solid var(--border);border-radius:6px;padding:5px 10px;color:var(--dim);font-size:11px;cursor:pointer;font-family:inherit;flex-shrink:0;}
+.tb-leave:hover{color:var(--red);border-color:var(--red);}
+.main{flex:1;display:flex;overflow:hidden;min-height:0;}
 
-/* ─── SCREENS ─── */
-.screen { display: none; min-height: 100vh; }
-.screen.active { display: flex; }
+/* ── BOARD AREA ── */
+.board-area{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:6px;overflow:hidden;min-width:0;min-height:0;}
+.captured{display:flex;flex-wrap:wrap;gap:1px;min-height:20px;font-size:clamp(11px,2.2vw,16px);opacity:.72;padding:1px 0;flex-shrink:0;}
 
-/* ─── LOBBY ─── */
-#lobby {
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 40px 20px;
-  position: relative;
+/* THE BOARD — strict square cells */
+#board{
+  display:grid;
+  grid-template-columns:repeat(8,1fr);
+  grid-template-rows:repeat(8,1fr);
+  /* Square: min of available width and available height */
+  width:min(calc(100vw - 12px), calc(var(--board-h, 100vh) - 12px));
+  height:min(calc(100vw - 12px), calc(var(--board-h, 100vh) - 12px));
+  border:2px solid #555;
+  flex-shrink:0;
+  user-select:none;
+  touch-action:none;
 }
+.sq{
+  position:relative;display:flex;align-items:center;justify-content:center;
+  cursor:pointer;overflow:hidden;
+}
+/* Force equal cells */
+.sq::before{content:'';display:block;padding-top:0%;}
+.sq.l{background:var(--sq-l);}
+.sq.d{background:var(--sq-d);}
+.sq.hi{background:var(--hi)!important;}
+.sq.sel{background:var(--sel)!important;}
+.sq.last{background:var(--last)!important;}
+.sq.chk{background:var(--chk)!important;}
+.sq.sk-t{background:rgba(155,89,182,.5)!important;cursor:crosshair;}
+.sq.dov{background:rgba(80,220,100,.4)!important;}
+.cfile{position:absolute;bottom:1px;right:2px;font-size:clamp(6px,1vw,9px);font-weight:700;opacity:.65;pointer-events:none;line-height:1;}
+.sq.l .cfile{color:var(--sq-d);}
+.sq.d .cfile{color:var(--sq-l);}
+.crank{position:absolute;top:1px;left:2px;font-size:clamp(6px,1vw,9px);font-weight:700;opacity:.65;pointer-events:none;line-height:1;}
+.sq.l .crank{color:var(--sq-d);}
+.sq.d .crank{color:var(--sq-l);}
 
-.lobby-bg {
-  position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 0;
+/* ── PIECES ── */
+/* Use font-size based on actual cell size, computed dynamically */
+.pc{
+  width:100%;height:100%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:inherit; /* set by JS after render */
+  line-height:1;
+  cursor:grab;
+  position:relative;z-index:2;
+  transition:transform .08s;
+  pointer-events:all;
 }
-.lobby-bg::before {
-  content: '';
-  position: absolute; inset: 0;
-  background: repeating-linear-gradient(
-    45deg,
-    transparent,
-    transparent 60px,
-    rgba(201,168,76,0.015) 60px,
-    rgba(201,168,76,0.015) 61px
-  );
-}
-.floating-piece {
-  position: absolute;
-  font-size: clamp(40px, 6vw, 80px);
-  opacity: 0.04;
-  animation: floatPiece 20s infinite linear;
-  filter: sepia(1) hue-rotate(10deg);
-}
-@keyframes floatPiece {
-  0% { transform: translateY(110vh) rotate(0deg); }
-  100% { transform: translateY(-20vh) rotate(360deg); }
-}
+.pc:active{cursor:grabbing;}
+/* White pieces: hollow Unicode symbols, colored white with black outline */
+.wp{color:#ffffff;text-shadow:0 0 1px #000,0 0 2px #000,0 0 3px #000,-1px -1px 0 #333,1px -1px 0 #333,-1px 1px 0 #333,1px 1px 0 #333;}
+/* Black pieces: solid Unicode symbols, colored dark with light outline */
+.bp{color:#1a1a1a;text-shadow:0 0 1px rgba(255,255,255,.2),0 0 2px rgba(255,255,255,.15),-1px -1px 0 rgba(255,255,255,.15),1px -1px 0 rgba(255,255,255,.15),-1px 1px 0 rgba(255,255,255,.15),1px 1px 0 rgba(255,255,255,.15);}
+.pc.frozen{filter:drop-shadow(0 0 4px #4af) grayscale(.4);}
+.pc.limited{filter:drop-shadow(0 0 4px #f4a) saturate(.55);}
 
-.logo-area {
-  position: relative; z-index: 1; text-align: center; margin-bottom: 50px;
-}
-.logo-title {
-  font-family: 'Cinzel Decorative', serif;
-  font-size: clamp(28px, 5vw, 52px);
-  font-weight: 900;
-  background: linear-gradient(135deg, var(--gold-light), var(--gold), var(--gold-dark));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  letter-spacing: 0.05em;
-  line-height: 1.2;
-  text-shadow: none;
-  filter: drop-shadow(0 0 30px rgba(201,168,76,0.3));
-}
-.logo-sub {
-  font-family: 'Crimson Pro', serif;
-  font-style: italic;
-  color: var(--text-dim);
-  font-size: 16px;
-  letter-spacing: 0.3em;
-  margin-top: 8px;
-}
+/* Drag ghost */
+.ghost{position:fixed;pointer-events:none;z-index:9999;transform:translate(-50%,-50%);display:none;font-size:clamp(36px,10vw,64px);filter:drop-shadow(0 3px 8px rgba(0,0,0,.6));line-height:1;}
 
-.lobby-card {
-  position: relative; z-index: 1;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 40px;
-  width: 100%;
-  max-width: 440px;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(201,168,76,0.05) inset;
-}
-.lobby-card::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 50%; transform: translateX(-50%);
-  width: 60%; height: 1px;
-  background: linear-gradient(90deg, transparent, var(--gold), transparent);
-}
+/* ── SIDE PANEL (desktop) ── */
+.side{width:190px;background:var(--panel);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0;}
+.ss{padding:8px 10px;border-bottom:1px solid var(--border);flex-shrink:0;}
+.st{font-size:10px;letter-spacing:.15em;color:var(--gold);text-transform:uppercase;margin-bottom:4px;}
+.mlist{flex:1;overflow-y:auto;padding:6px 10px;font-size:12px;line-height:1.9;color:var(--dim);}
+.mw{color:var(--text);}
+.chat-w{display:flex;flex-direction:column;flex:1;min-height:0;}
+#cmsgs{flex:1;overflow-y:auto;padding:7px 9px;display:flex;flex-direction:column;gap:5px;}
+.msg{padding:6px 9px;border-radius:7px;font-size:12px;line-height:1.4;word-break:break-word;}
+.msg.sys{background:rgba(201,168,76,.07);border:1px solid rgba(201,168,76,.15);color:var(--gold);text-align:center;font-size:11px;}
+.msg.mine{background:rgba(74,158,255,.1);border:1px solid rgba(74,158,255,.2);}
+.msg.theirs{background:var(--panel2);border:1px solid var(--border);}
+.msg-s{font-size:10px;font-weight:600;color:var(--dim);margin-bottom:2px;}
+.cin{display:flex;gap:5px;padding:7px 9px;border-top:1px solid var(--border);flex-shrink:0;}
+.cin input{flex:1;background:var(--panel2);border:1px solid var(--border);border-radius:7px;padding:7px 10px;color:var(--text);font-size:13px;font-family:inherit;outline:none;}
+.cin input:focus{border-color:var(--gold);}
+.cin button{background:linear-gradient(135deg,#7a5c10,var(--gold));border:none;border-radius:7px;padding:0 12px;color:#1a1000;font-size:14px;cursor:pointer;}
 
-.field-group { margin-bottom: 20px; }
-.field-label {
-  display: block;
-  font-size: 11px;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-  margin-bottom: 8px;
-}
-.field-input {
-  width: 100%;
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 12px 16px;
-  color: var(--text);
-  font-family: 'Noto Sans TC', sans-serif;
-  font-size: 15px;
-  transition: border-color 0.2s, box-shadow 0.2s;
-  outline: none;
-}
-.field-input:focus {
-  border-color: var(--gold-dark);
-  box-shadow: 0 0 0 3px rgba(201,168,76,0.1);
-}
+/* ── BOTTOM BAR (mobile) ── */
+.botbar{display:none;background:var(--panel);border-top:1px solid var(--border);padding:5px 10px 5px;flex-shrink:0;}
+.brow{display:flex;gap:6px;align-items:stretch;}
+.bsk{flex:1;background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:7px 6px;text-align:center;cursor:pointer;font-size:11px;color:var(--text);transition:all .15s;}
+.bsk.act{border-color:var(--blue);color:var(--blue);background:rgba(74,158,255,.08);}
+.bsk.cd{opacity:.4;cursor:not-allowed;}
+.bsk-icon{font-size:20px;display:block;margin-bottom:1px;}
+.bchat{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:7px 14px;cursor:pointer;color:var(--dim);font-size:13px;}
+.bturn{font-size:11px;color:var(--dim);text-align:center;display:flex;align-items:center;padding:0 4px;}
 
-.divider {
-  display: flex; align-items: center; gap: 12px;
-  margin: 28px 0;
-  color: var(--text-dim); font-size: 12px; letter-spacing: 0.15em;
-}
-.divider::before, .divider::after {
-  content: ''; flex: 1;
-  height: 1px; background: var(--border);
-}
+/* ── MOBILE CHAT DRAWER ── */
+.drawer{position:fixed;bottom:0;left:0;right:0;background:var(--panel);border-top:1px solid var(--border);border-radius:16px 16px 0 0;z-index:500;transform:translateY(100%);transition:transform .3s;height:58vh;display:flex;flex-direction:column;}
+.drawer.open{transform:translateY(0);}
+.drhdr{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;}
+.drclose{background:none;border:none;color:var(--dim);font-size:20px;cursor:pointer;}
+#cmsgsm{flex:1;overflow-y:auto;padding:8px 12px;display:flex;flex-direction:column;gap:5px;}
 
-.btn {
-  width: 100%;
-  padding: 14px;
-  border: none;
-  border-radius: 8px;
-  font-family: 'Noto Sans TC', sans-serif;
-  font-size: 15px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-  letter-spacing: 0.05em;
-}
-.btn-gold {
-  background: linear-gradient(135deg, var(--gold-dark), var(--gold));
-  color: #1a1000;
-  margin-bottom: 12px;
-  box-shadow: 0 4px 15px rgba(201,168,76,0.2);
-}
-.btn-gold:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(201,168,76,0.35); }
-.btn-outline {
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text);
-}
-.btn-outline:hover { border-color: var(--gold-dark); color: var(--gold-light); }
-.btn:active { transform: translateY(0); }
+/* ── MODALS ── */
+.ov{position:fixed;inset:0;background:rgba(0,0,0,.8);backdrop-filter:blur(6px);z-index:1000;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .25s;padding:14px;}
+.ov.on{opacity:1;pointer-events:all;}
+.modal{background:var(--panel);border:1px solid var(--gold);border-radius:14px;padding:26px 22px;width:100%;max-width:420px;position:relative;max-height:88vh;overflow-y:auto;}
+.modal::before{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:50%;height:1px;background:linear-gradient(90deg,transparent,var(--gold),transparent);}
+.mt{font-family:'Cinzel Decorative',serif;font-size:17px;color:var(--gold2);margin-bottom:6px;text-align:center;}
+.ms{color:var(--dim);font-size:13px;margin-bottom:16px;text-align:center;}
+.mbtns{display:flex;gap:10px;}
+.mbtns .btn{margin:0;}
 
-/* ─── ROOM LIST ─── */
-#room-list { display: none; margin-top: 20px; }
-#room-list.visible { display: block; }
-.room-entry {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 12px 16px;
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  margin-bottom: 8px;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-.room-entry:hover { border-color: var(--gold-dark); background: var(--surface3); }
-.room-entry-name { font-weight: 500; font-size: 14px; }
-.room-entry-info { font-size: 12px; color: var(--text-dim); }
-.room-badge {
-  padding: 3px 8px; border-radius: 20px; font-size: 11px;
-}
-.badge-waiting { background: rgba(74,158,255,0.15); color: var(--skill-blue); border: 1px solid rgba(74,158,255,0.3); }
-.badge-playing { background: rgba(201,168,76,0.15); color: var(--gold); border: 1px solid rgba(201,168,76,0.3); }
+/* Skill pick */
+.skgrid{display:flex;flex-direction:column;gap:8px;margin:10px 0;}
+.sko{background:var(--panel2);border:2px solid var(--border);border-radius:10px;padding:13px;cursor:pointer;transition:all .15s;display:flex;gap:11px;align-items:flex-start;}
+.sko:hover{border-color:var(--blue);}
+.sko.sel{border-color:var(--blue);background:rgba(74,158,255,.06);}
+.sko-ic{font-size:24px;flex-shrink:0;line-height:1;margin-top:2px;}
+.sko-nm{font-size:13px;font-weight:600;margin-bottom:3px;}
+.sko-ds{font-size:12px;color:var(--dim);line-height:1.4;}
 
-/* ─── GAME SCREEN ─── */
-#game {
-  flex-direction: column;
-  align-items: stretch;
-  height: 100vh;
-  overflow: hidden;
-}
+/* Promo */
+.prow{display:flex;justify-content:center;gap:12px;margin:16px 0;}
+.pbtn{font-size:42px;background:none;border:2px solid var(--border);border-radius:8px;padding:6px 10px;cursor:pointer;transition:all .15s;}
+.pbtn:hover{border-color:var(--gold);transform:scale(1.1);}
 
-.game-layout {
-  display: grid;
-  grid-template-columns: 240px 1fr 280px;
-  grid-template-rows: 1fr;
-  height: 100vh;
-  gap: 0;
-}
+/* ── TOAST ── */
+#toast{position:fixed;bottom:70px;left:50%;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--border);border-radius:100px;padding:7px 18px;font-size:12px;color:var(--dim);z-index:800;opacity:0;transition:opacity .25s;pointer-events:none;white-space:nowrap;max-width:88vw;text-align:center;}
+#toast.on{opacity:1;}
+#toast.gold{border-color:var(--gold);color:var(--gold2);}
+#toast.blue{border-color:var(--blue);color:var(--blue);}
 
-/* ─── LEFT PANEL ─── */
-.left-panel {
-  background: var(--surface);
-  border-right: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  padding: 20px;
-  overflow-y: auto;
-  gap: 16px;
-}
+/* ── ERROR 404 ── */
+#e404{position:fixed;inset:0;background:#000;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .3s;}
+#e404.on{opacity:1;pointer-events:all;}
+.e4t{font-family:'Courier New',monospace;font-size:clamp(48px,12vw,130px);font-weight:900;color:#f00;text-shadow:0 0 40px #f00;animation:glitch .25s infinite;}
+.e4s{font-family:'Courier New',monospace;color:#f44;font-size:clamp(12px,2.5vw,20px);margin-top:12px;letter-spacing:.2em;animation:flicker .4s infinite;}
+.e4c{font-family:'Courier New',monospace;color:#555;font-size:13px;margin-top:18px;}
+#fxmsg{position:fixed;inset:0;background:rgba(0,14,0,.97);z-index:99998;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .4s;}
+#fxmsg.on{opacity:1;pointer-events:all;}
+.fxt{font-family:'Courier New',monospace;color:#0f8;text-shadow:0 0 20px #0f8;font-size:clamp(14px,3vw,26px);letter-spacing:.12em;text-align:center;padding:0 20px;line-height:1.6;}
+@keyframes glitch{0%,100%{text-shadow:0 0 40px #f00;transform:none;}25%{text-shadow:-3px 0 #f0f,3px 0 #0ff;transform:translate(-2px,1px)skew(-1deg);}75%{text-shadow:3px 0 #f0f,-3px 0 #0ff;transform:translate(2px,-1px)skew(1deg);}}
+@keyframes flicker{0%,100%{opacity:1;}50%{opacity:.55;}}
 
-.panel-title {
-  font-family: 'Cinzel Decorative', serif;
-  font-size: 11px;
-  letter-spacing: 0.2em;
-  color: var(--gold);
-  text-transform: uppercase;
-  margin-bottom: 4px;
-}
+/* King-walk banner */
+#kwb{position:fixed;top:0;left:0;right:0;z-index:300;background:linear-gradient(135deg,#7a5c10,var(--gold),#7a5c10);color:#1a1000;text-align:center;padding:8px 12px;font-size:12px;font-weight:700;transform:translateY(-100%);transition:transform .35s;}
+#kwb.on{transform:translateY(0);}
 
-.player-card {
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 14px;
-  position: relative;
-}
-.player-card.active-turn {
-  border-color: var(--gold-dark);
-  box-shadow: 0 0 12px rgba(201,168,76,0.15), inset 0 0 0 1px rgba(201,168,76,0.05);
-}
-.player-color-dot {
-  width: 10px; height: 10px; border-radius: 50%;
-  display: inline-block; margin-right: 8px;
-}
-.player-name-row {
-  display: flex; align-items: center;
-  font-size: 14px; font-weight: 500;
-  margin-bottom: 6px;
-}
-.player-status { font-size: 11px; color: var(--text-dim); }
-
-.skill-slots {
-  margin-top: 10px;
-  display: grid; grid-template-columns: 1fr 1fr;
-  gap: 6px;
-}
-.skill-slot {
-  background: var(--surface3);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 6px 8px;
-  font-size: 11px;
-  text-align: center;
-  cursor: pointer;
-  transition: all 0.15s;
-  color: var(--text-dim);
-  min-height: 44px;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 2px;
-}
-.skill-slot.has-skill { color: var(--text); }
-.skill-slot.skill-active {
-  border-color: var(--skill-blue);
-  color: var(--skill-blue);
-  background: rgba(74,158,255,0.08);
-  box-shadow: 0 0 8px rgba(74,158,255,0.2);
-}
-.skill-slot.on-cooldown {
-  opacity: 0.5; cursor: not-allowed;
-}
-.skill-icon { font-size: 18px; }
-.skill-name { font-size: 10px; letter-spacing: 0.05em; }
-.skill-cooldown { font-size: 9px; color: var(--text-dim); }
-
-.game-info {
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 14px;
-}
-.turn-indicator {
-  font-size: 13px; text-align: center;
-  padding: 8px;
-  border-radius: 6px;
-  margin-bottom: 8px;
-}
-.turn-white { background: rgba(240,217,181,0.1); color: var(--white-sq); }
-.turn-black { background: rgba(181,136,99,0.1); color: var(--black-sq); }
-
-.move-history {
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 14px;
-  flex: 1;
-  overflow: hidden;
-  display: flex; flex-direction: column;
-}
-.move-list {
-  overflow-y: auto;
-  flex: 1;
-  font-size: 12px;
-  font-family: 'Crimson Pro', serif;
-  line-height: 1.8;
-  color: var(--text-dim);
-}
-.move-list span.move-w { color: var(--text); }
-.move-list span.move-b { color: var(--text-dim); }
-
-/* ─── CENTER: BOARD ─── */
-.center-area {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--deep);
-  position: relative;
-  overflow: hidden;
-  padding: 20px;
-}
-.center-area::before {
-  content: '';
-  position: absolute; inset: 0;
-  background: radial-gradient(ellipse at center, rgba(201,168,76,0.03) 0%, transparent 70%);
-  pointer-events: none;
-}
-
-.board-wrapper {
-  position: relative;
-  display: flex; flex-direction: column; align-items: center;
-}
-
-.board-container {
-  position: relative;
-  border: 2px solid var(--gold-dark);
-  border-radius: 4px;
-  box-shadow:
-    0 0 0 6px rgba(201,168,76,0.08),
-    0 0 0 8px var(--surface),
-    0 0 0 9px var(--border),
-    0 20px 60px rgba(0,0,0,0.6);
-}
-
-#chess-board {
-  display: grid;
-  grid-template-columns: repeat(8, 1fr);
-  width: clamp(320px, 55vmin, 560px);
-  height: clamp(320px, 55vmin, 560px);
-  user-select: none;
-}
-
-.sq {
-  position: relative;
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer;
-  transition: background-color 0.1s;
-}
-.sq.light { background: var(--white-sq); }
-.sq.dark  { background: var(--black-sq); }
-.sq.highlight { background: var(--highlight) !important; }
-.sq.selected { background: rgba(50, 180, 255, 0.4) !important; }
-.sq.last-move { background: rgba(255,200,0,0.25) !important; }
-.sq.in-check { background: rgba(220,50,50,0.55) !important; }
-.sq.skill-target {
-  background: rgba(155, 89, 182, 0.45) !important;
-  cursor: crosshair;
-}
-.sq.drag-over { background: rgba(100,220,100,0.4) !important; }
-
-.coord-file {
-  position: absolute; bottom: 2px; right: 4px;
-  font-size: 9px; font-weight: 600;
-  opacity: 0.7;
-  font-family: 'Crimson Pro', serif;
-}
-.sq.light .coord-file { color: var(--black-sq); }
-.sq.dark  .coord-file { color: var(--white-sq); }
-.coord-rank {
-  position: absolute; top: 2px; left: 4px;
-  font-size: 9px; font-weight: 600;
-  opacity: 0.7;
-  font-family: 'Crimson Pro', serif;
-}
-.sq.light .coord-rank { color: var(--black-sq); }
-.sq.dark  .coord-rank { color: var(--white-sq); }
-
-.piece {
-  font-size: clamp(24px, 4.5vmin, 44px);
-  cursor: grab;
-  transition: transform 0.1s;
-  position: relative; z-index: 2;
-  line-height: 1;
-  filter: drop-shadow(0 2px 3px rgba(0,0,0,0.4));
-}
-.piece:hover { transform: scale(1.1); }
-.piece.dragging {
-  cursor: grabbing;
-  opacity: 0;
-}
-.piece.skill-frozen { filter: drop-shadow(0 0 6px #4af) grayscale(0.4); }
-.piece.skill-buffed  { filter: drop-shadow(0 0 6px #fa4) brightness(1.2); }
-
-.drag-ghost {
-  position: fixed;
-  pointer-events: none;
-  z-index: 9999;
-  font-size: clamp(32px, 6vmin, 56px);
-  transform: translate(-50%, -50%);
-  filter: drop-shadow(0 4px 12px rgba(0,0,0,0.5));
-}
-
-/* ─── CAPTURED ─── */
-.captured-row {
-  display: flex; flex-wrap: wrap; gap: 2px;
-  padding: 6px 0;
-  min-height: 28px;
-  font-size: 18px;
-  opacity: 0.7;
-}
-
-/* ─── RIGHT PANEL: CHAT ─── */
-.right-panel {
-  background: var(--surface);
-  border-left: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  padding: 0;
-  overflow: hidden;
-}
-
-.chat-header {
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface2);
-  display: flex; align-items: center; justify-content: space-between;
-}
-.room-tag {
-  font-size: 11px;
-  color: var(--gold);
-  font-family: 'Cinzel Decorative', serif;
-  letter-spacing: 0.1em;
-}
-
-.chat-messages {
-  flex: 1;
-  overflow-y: auto;
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
-}
-.chat-messages::-webkit-scrollbar { width: 4px; }
-.chat-messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-
-.chat-msg {
-  padding: 8px 12px;
-  border-radius: 8px;
-  max-width: 100%;
-  word-break: break-word;
-  font-size: 13px;
-  line-height: 1.5;
-}
-.chat-msg.system {
-  background: rgba(201,168,76,0.08);
-  border: 1px solid rgba(201,168,76,0.15);
-  color: var(--gold);
-  text-align: center;
-  font-size: 11px;
-  font-style: italic;
-}
-.chat-msg.mine {
-  background: rgba(74,158,255,0.12);
-  border: 1px solid rgba(74,158,255,0.2);
-  align-self: flex-end;
-}
-.chat-msg.theirs {
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  align-self: flex-start;
-}
-.chat-sender {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  margin-bottom: 3px;
-  color: var(--text-dim);
-}
-
-.chat-input-area {
-  padding: 12px 16px;
-  border-top: 1px solid var(--border);
-  display: flex; gap: 8px;
-}
-.chat-input {
-  flex: 1;
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 10px 14px;
-  color: var(--text);
-  font-family: 'Noto Sans TC', sans-serif;
-  font-size: 13px;
-  outline: none;
-  transition: border-color 0.2s;
-  resize: none;
-  height: 40px;
-}
-.chat-input:focus { border-color: var(--gold-dark); }
-.chat-send {
-  background: linear-gradient(135deg, var(--gold-dark), var(--gold));
-  border: none;
-  border-radius: 8px;
-  padding: 0 16px;
-  color: #1a1000;
-  font-size: 16px;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-.chat-send:hover { transform: scale(1.05); }
-
-/* ─── SKILL PANEL in RIGHT ─── */
-.skill-info {
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface2);
-}
-.skill-desc-box {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 10px 12px;
-  font-size: 12px;
-  color: var(--text-dim);
-  min-height: 50px;
-  line-height: 1.6;
-}
-
-/* ─── MODAL ─── */
-.modal-overlay {
-  position: fixed; inset: 0;
-  background: rgba(0,0,0,0.75);
-  backdrop-filter: blur(8px);
-  z-index: 1000;
-  display: flex; align-items: center; justify-content: center;
-  opacity: 0; pointer-events: none;
-  transition: opacity 0.3s;
-}
-.modal-overlay.open { opacity: 1; pointer-events: all; }
-
-.modal-box {
-  background: var(--surface);
-  border: 1px solid var(--gold-dark);
-  border-radius: 16px;
-  padding: 40px;
-  width: 90%;
-  max-width: 420px;
-  box-shadow: 0 30px 80px rgba(0,0,0,0.6);
-  text-align: center;
-  position: relative;
-}
-.modal-box::before {
-  content: '';
-  position: absolute; top: 0; left: 50%; transform: translateX(-50%);
-  width: 50%; height: 1px;
-  background: linear-gradient(90deg, transparent, var(--gold), transparent);
-}
-.modal-title {
-  font-family: 'Cinzel Decorative', serif;
-  font-size: 22px;
-  color: var(--gold-light);
-  margin-bottom: 12px;
-}
-.modal-sub { color: var(--text-dim); font-size: 14px; margin-bottom: 28px; }
-.modal-btns { display: flex; gap: 12px; }
-.modal-btns .btn { margin: 0; }
-
-/* ─── PROMOTION MODAL ─── */
-.promo-pieces {
-  display: flex; justify-content: center; gap: 16px;
-  margin: 20px 0;
-}
-.promo-piece-btn {
-  font-size: 48px;
-  cursor: pointer;
-  transition: transform 0.15s;
-  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4));
-  background: none; border: 2px solid var(--border); border-radius: 8px;
-  padding: 8px 12px;
-}
-.promo-piece-btn:hover { transform: scale(1.15); border-color: var(--gold); }
-
-/* ─── STATUS BAR ─── */
-.status-bar {
-  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: 100px;
-  padding: 8px 20px;
-  font-size: 13px;
-  color: var(--text-dim);
-  z-index: 100;
-  opacity: 0;
-  transition: opacity 0.3s;
-  pointer-events: none;
-  max-width: 80vw;
-  text-align: center;
-}
-.status-bar.show { opacity: 1; }
-.status-bar.gold { border-color: var(--gold-dark); color: var(--gold-light); }
-.status-bar.blue { border-color: rgba(74,158,255,0.5); color: var(--skill-blue); }
-
-/* ─── SKILL SELECTION ─── */
-.skill-pick-grid {
-  display: grid; grid-template-columns: 1fr 1fr;
-  gap: 10px; margin: 16px 0;
-}
-.skill-pick-btn {
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 14px;
-  cursor: pointer;
-  text-align: left;
-  color: var(--text);
-  transition: all 0.15s;
-}
-.skill-pick-btn:hover { border-color: var(--skill-blue); background: rgba(74,158,255,0.06); }
-.skill-pick-btn.selected { border-color: var(--skill-blue); background: rgba(74,158,255,0.1); }
-.spb-icon { font-size: 24px; margin-bottom: 6px; }
-.spb-name { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
-.spb-desc { font-size: 11px; color: var(--text-dim); line-height: 1.4; }
-
-/* ─── LEAVE BTN ─── */
-.leave-btn {
-  position: fixed; top: 16px; left: 16px; z-index: 50;
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 8px 14px;
-  color: var(--text-dim);
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.15s;
-  font-family: 'Noto Sans TC', sans-serif;
-}
-.leave-btn:hover { color: var(--danger); border-color: var(--danger); }
-
-/* ─── RESPONSIVE ─── */
-@media (max-width: 900px) {
-  .game-layout {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto 1fr auto;
-    height: auto;
-    min-height: 100vh;
+/* ── RESPONSIVE ── */
+@media(min-width:600px){
+  .side{display:flex;}
+  .botbar,.drawer{display:none!important;}
+  #board{
+    width:min(calc(100vw - 204px), calc(100vh - 58px));
+    height:min(calc(100vw - 204px), calc(100vh - 58px));
   }
-  .left-panel { flex-direction: row; flex-wrap: wrap; padding: 12px; border-right: none; border-bottom: 1px solid var(--border); }
-  .right-panel { height: 300px; border-left: none; border-top: 1px solid var(--border); }
-  .center-area { padding: 12px; }
 }
-
-/* ─── ANIMATIONS ─── */
-@keyframes pieceCapture {
-  0% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.4); opacity: 0.5; }
-  100% { transform: scale(0); opacity: 0; }
+@media(max-width:599px){
+  .side{display:none!important;}
+  .botbar{display:block;}
+  #board{
+    width:min(calc(100vw - 10px), calc(100vh - 148px));
+    height:min(calc(100vw - 10px), calc(100vh - 148px));
+  }
 }
-@keyframes skillActivate {
-  0% { box-shadow: 0 0 0 0 rgba(74,158,255,0.6); }
-  70% { box-shadow: 0 0 0 20px rgba(74,158,255,0); }
-  100% { box-shadow: 0 0 0 0 rgba(74,158,255,0); }
-}
-.skill-pulse { animation: skillActivate 0.6s ease-out; }
-
-@keyframes checkFlash {
-  0%, 100% { filter: brightness(1); }
-  50% { filter: brightness(1.3) drop-shadow(0 0 8px rgba(220,50,50,0.8)); }
-}
-.in-check { animation: checkFlash 0.8s ease-in-out; }
-
-/* ─── ERROR 404 OVERLAY ─── */
-#error404-overlay {
-  position: fixed; inset: 0; z-index: 99999;
-  background: #000;
-  display: flex; flex-direction: column;
-  align-items: center; justify-content: center;
-  opacity: 0; pointer-events: none;
-  transition: opacity 0.3s;
-}
-#error404-overlay.show { opacity: 1; pointer-events: all; }
-.error404-text {
-  font-family: 'Courier New', monospace;
-  font-size: clamp(60px, 15vw, 160px);
-  font-weight: 900;
-  color: #ff0000;
-  text-shadow: 0 0 40px #ff0000, 0 0 80px #ff000055;
-  animation: glitch 0.3s infinite;
-  letter-spacing: -0.02em;
-}
-.error404-sub {
-  font-family: 'Courier New', monospace;
-  color: #ff4444;
-  font-size: clamp(14px, 2.5vw, 22px);
-  margin-top: 16px;
-  letter-spacing: 0.2em;
-  animation: flicker 0.5s infinite;
-}
-.error404-countdown {
-  font-family: 'Courier New', monospace;
-  color: #888;
-  font-size: 14px;
-  margin-top: 24px;
-  letter-spacing: 0.1em;
-}
-#server-fixed-overlay {
-  position: fixed; inset: 0; z-index: 99998;
-  background: rgba(0,20,0,0.97);
-  display: flex; flex-direction: column;
-  align-items: center; justify-content: center;
-  opacity: 0; pointer-events: none;
-  transition: opacity 0.5s;
-}
-#server-fixed-overlay.show { opacity: 1; pointer-events: all; }
-.server-fixed-text {
-  font-family: 'Courier New', monospace;
-  font-size: clamp(16px, 3vw, 28px);
-  color: #00ff88;
-  text-shadow: 0 0 20px #00ff88;
-  letter-spacing: 0.15em;
-  text-align: center;
-  padding: 0 20px;
-}
-@keyframes glitch {
-  0%,100% { text-shadow: 0 0 40px #ff0000, 0 0 80px #ff000055; transform: translate(0); }
-  20% { text-shadow: -3px 0 #ff00ff, 3px 0 #00ffff; transform: translate(-2px,1px) skew(-1deg); }
-  40% { text-shadow: 3px 0 #ff00ff, -3px 0 #00ffff; transform: translate(2px,-1px) skew(1deg); }
-  60% { text-shadow: 0 0 40px #ff0000; transform: translate(-1px,2px); }
-}
-@keyframes flicker {
-  0%,100% { opacity:1; } 50% { opacity:0.6; }
-}
-#king-walk-banner {
-  position: fixed; top: 0; left: 0; right: 0; z-index: 200;
-  background: linear-gradient(135deg, var(--gold-dark), var(--gold), var(--gold-dark));
-  color: #1a1000;
-  text-align: center;
-  padding: 12px;
-  font-family: 'Cinzel Decorative', serif;
-  font-size: 15px;
-  letter-spacing: 0.1em;
-  transform: translateY(-100%);
-  transition: transform 0.4s;
-  box-shadow: 0 4px 20px rgba(201,168,76,0.4);
-}
-#king-walk-banner.show { transform: translateY(0); }
-
-/* ─── LOADING ─── */
-.loader {
-  display: inline-block; width: 20px; height: 20px;
-  border: 2px solid var(--border);
-  border-top-color: var(--gold);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-  vertical-align: middle; margin-right: 8px;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
-
-.waiting-msg {
-  text-align: center; padding: 20px;
-  color: var(--text-dim); font-size: 14px;
-}
+::-webkit-scrollbar{width:3px;}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
 </style>
 </head>
 <body>
 
 <!-- LOBBY -->
-<div id="lobby" class="screen active">
-  <div class="lobby-bg">
-    <div class="floating-piece" style="left:5%;animation-delay:0s;animation-duration:25s">♟</div>
-    <div class="floating-piece" style="left:20%;animation-delay:4s;animation-duration:18s">♞</div>
-    <div class="floating-piece" style="left:40%;animation-delay:8s;animation-duration:22s">♝</div>
-    <div class="floating-piece" style="left:60%;animation-delay:2s;animation-duration:20s">♜</div>
-    <div class="floating-piece" style="left:75%;animation-delay:6s;animation-duration:16s">♛</div>
-    <div class="floating-piece" style="left:90%;animation-delay:10s;animation-duration:24s">♚</div>
-  </div>
-
-  <div class="logo-area">
-    <div class="logo-title">技能西洋棋</div>
-    <div class="logo-title" style="font-size:clamp(18px,3vw,32px)">Skill Chess</div>
-    <div class="logo-sub">每位棋手擁有獨特技能</div>
-  </div>
-
-  <div class="lobby-card">
-    <div class="field-group">
-      <label class="field-label">你的名字</label>
-      <input class="field-input" id="player-name" placeholder="輸入你的名字…" maxlength="16">
-    </div>
-
-    <div class="divider">創建房間</div>
-    <div class="field-group">
-      <label class="field-label">房號（自訂）</label>
-      <input class="field-input" id="room-id-create" placeholder="輸入4~8位房號…" maxlength="8">
-    </div>
-    <button class="btn btn-gold" onclick="createRoom()">✦ 創建房間</button>
-
-    <div class="divider">加入房間</div>
-    <div class="field-group">
-      <label class="field-label">加入房號</label>
-      <input class="field-input" id="room-id-join" placeholder="輸入房號…" maxlength="8">
-    </div>
-    <button class="btn btn-outline" onclick="joinRoom()">→ 加入房間</button>
-
-    <div id="room-list"></div>
+<div id="lobby" class="scr on">
+  <div class="logo">技能西洋棋</div>
+  <div class="logo-sub">Skill Chess</div>
+  <div class="card">
+    <div class="mg"><label class="lbl">你的名字</label><input class="fi" id="pname" placeholder="輸入名字…" maxlength="14"></div>
+    <div class="div">創建房間</div>
+    <div class="mg"><label class="lbl">自訂房號</label><input class="fi" id="ridc" placeholder="2~8碼…" maxlength="8"></div>
+    <button class="btn btn-g" onclick="createRoom()">✦ 創建房間</button>
+    <div class="div">加入房間</div>
+    <div class="mg"><label class="lbl">輸入房號</label><input class="fi" id="ridj" placeholder="輸入房號…" maxlength="8"></div>
+    <button class="btn btn-o" onclick="joinRoom()">→ 加入房間</button>
   </div>
 </div>
 
 <!-- GAME -->
-<div id="game" class="screen">
-  <button class="leave-btn" onclick="leaveGame()">← 離開房間</button>
-  <div class="game-layout">
-    <!-- LEFT -->
-    <div class="left-panel">
-      <div>
-        <div class="panel-title">玩家資訊</div>
-      </div>
+<div id="game" class="scr">
+  <div class="topbar">
+    <div class="tb-p">
+      <span class="tb-dot" style="background:#222;border:1.5px solid #777"></span>
+      <span class="tb-name" id="tbn-b">等待…</span>
+      <span class="tb-sk" id="tbs-b">—</span>
+    </div>
+    <div class="tb-turn" id="tb-turn">—</div>
+    <div class="tb-p" style="justify-content:flex-end">
+      <span class="tb-sk" id="tbs-w">—</span>
+      <span class="tb-name" id="tbn-w">—</span>
+      <span class="tb-dot" style="background:#f0d9b5;border:1.5px solid #aaa"></span>
+    </div>
+    <button class="tb-leave" onclick="leaveGame()">離開</button>
+  </div>
 
-      <div class="player-card" id="card-black">
-        <div class="player-name-row">
-          <span class="player-color-dot" style="background:#1a1a1a;border:1.5px solid #666"></span>
-          <span id="name-black">等待對手…</span>
+  <div class="main">
+    <div class="board-area">
+      <div class="captured" id="cap-t"></div>
+      <div id="board"></div>
+      <div class="captured" id="cap-b"></div>
+    </div>
+    <div class="side">
+      <div class="ss"><div class="st">棋譜</div><div style="font-size:10px;color:var(--dim)" id="rlbl"></div></div>
+      <div class="mlist" id="mlist"></div>
+      <div class="chat-w">
+        <div class="ss"><div class="st">聊天</div></div>
+        <div id="cmsgs"></div>
+        <div class="cin">
+          <input id="cin-d" placeholder="訊息…" maxlength="200" onkeydown="if(event.key==='Enter')sendChat('d')">
+          <button onclick="sendChat('d')">➤</button>
         </div>
-        <div class="player-status" id="status-black">黑方</div>
-        <div class="skill-slots" id="skills-black"></div>
-      </div>
-
-      <div class="game-info">
-        <div class="turn-indicator" id="turn-indicator">等待開始…</div>
-        <div style="font-size:12px;color:var(--text-dim);text-align:center" id="room-label"></div>
-      </div>
-
-      <div class="player-card" id="card-white">
-        <div class="player-name-row">
-          <span class="player-color-dot" style="background:#f0d9b5;border:1.5px solid #999"></span>
-          <span id="name-white">等待玩家…</span>
-        </div>
-        <div class="player-status" id="status-white">白方</div>
-        <div class="skill-slots" id="skills-white"></div>
-      </div>
-
-      <div class="move-history">
-        <div class="panel-title">棋譜</div>
-        <div class="move-list" id="move-list"></div>
       </div>
     </div>
+  </div>
 
-    <!-- CENTER -->
-    <div class="center-area">
-      <div class="board-wrapper">
-        <div class="captured-row" id="captured-top"></div>
-        <div class="board-container">
-          <div id="chess-board"></div>
-        </div>
-        <div class="captured-row" id="captured-bottom"></div>
+  <div class="botbar">
+    <div class="brow">
+      <div class="bsk" id="mob-sk" onclick="mobSkillClick()">
+        <span class="bsk-icon" id="mob-sk-ic">—</span>
+        <span id="mob-sk-nm">技能</span>
       </div>
-    </div>
-
-    <!-- RIGHT -->
-    <div class="right-panel">
-      <div class="chat-header">
-        <span class="panel-title">聊天室</span>
-        <span class="room-tag" id="chat-room-tag"></span>
-      </div>
-      <div class="skill-info">
-        <div class="panel-title" style="margin-bottom:8px">技能說明</div>
-        <div class="skill-desc-box" id="skill-desc-box">點選技能格以查看說明</div>
-      </div>
-      <div class="chat-messages" id="chat-messages"></div>
-      <div class="chat-input-area">
-        <input class="chat-input" id="chat-input" placeholder="輸入訊息…" maxlength="200"
-               onkeydown="if(event.key==='Enter')sendChat()">
-        <button class="chat-send" onclick="sendChat()">➤</button>
-      </div>
+      <button class="bchat" onclick="toggleDrawer()">💬 聊天</button>
+      <div class="bturn" id="mob-turn">—</div>
     </div>
   </div>
 </div>
 
-<!-- GAME OVER MODAL -->
-<div class="modal-overlay" id="gameover-modal">
-  <div class="modal-box">
-    <div class="modal-title" id="gameover-title">遊戲結束</div>
-    <div class="modal-sub" id="gameover-sub"></div>
-    <div class="modal-btns">
-      <button class="btn btn-gold" onclick="rematch()">再來一局</button>
-      <button class="btn btn-outline" onclick="leaveGame()">離開房間</button>
+<!-- Mobile chat drawer -->
+<div class="drawer" id="drawer">
+  <div class="drhdr">
+    <span style="font-size:13px;font-weight:600">聊天室</span>
+    <button class="drclose" onclick="toggleDrawer()">✕</button>
+  </div>
+  <div id="cmsgsm" style="flex:1;overflow-y:auto;padding:8px 12px;display:flex;flex-direction:column;gap:5px;"></div>
+  <div class="cin" style="padding:9px 12px;">
+    <input id="cin-m" placeholder="訊息…" maxlength="200" onkeydown="if(event.key==='Enter')sendChat('m')">
+    <button onclick="sendChat('m')">➤</button>
+  </div>
+</div>
+
+<!-- Skill pick modal -->
+<div class="ov" id="sk-ov">
+  <div class="modal">
+    <div class="mt">選擇你的技能</div>
+    <div class="ms">每人選擇 1 個技能帶入對局</div>
+    <div class="skgrid" id="skgrid"></div>
+    <div class="mbtns"><button class="btn btn-g" onclick="confirmSkill()">確認技能</button></div>
+  </div>
+</div>
+
+<!-- Promo modal -->
+<div class="ov" id="promo-ov">
+  <div class="modal">
+    <div class="mt">兵的升變</div>
+    <div class="ms">選擇升變棋子</div>
+    <div class="prow" id="prow"></div>
+  </div>
+</div>
+
+<!-- Game over modal -->
+<div class="ov" id="go-ov">
+  <div class="modal">
+    <div class="mt" id="go-t">遊戲結束</div>
+    <div class="ms" id="go-s"></div>
+    <div class="mbtns">
+      <button class="btn btn-g" onclick="rematch()">再來一局</button>
+      <button class="btn btn-o" onclick="leaveGame()">離開</button>
     </div>
   </div>
 </div>
 
-<!-- PROMOTION MODAL -->
-<div class="modal-overlay" id="promo-modal">
-  <div class="modal-box">
-    <div class="modal-title">兵的升變</div>
-    <div class="modal-sub">選擇升變為哪種棋子</div>
-    <div class="promo-pieces" id="promo-pieces"></div>
-  </div>
+<!-- Error 404 -->
+<div id="e404">
+  <div class="e4t">ERROR 404</div>
+  <div class="e4s">伺服器崩潰中...</div>
+  <div class="e4c" id="e4c"></div>
 </div>
+<div id="fxmsg"><div class="fxt" id="fxt"></div></div>
 
-<!-- SKILL PICK MODAL -->
-<div class="modal-overlay" id="skill-modal">
-  <div class="modal-box" style="max-width:520px">
-    <div class="modal-title">選擇你的技能</div>
-    <div class="modal-sub">選擇1個技能帶入這場對局</div>
-    <div class="skill-pick-grid" id="skill-pick-grid"></div>
-    <button class="btn btn-gold" onclick="confirmSkills()" style="margin-top:8px">確認技能</button>
-  </div>
-</div>
+<!-- King walk banner -->
+<div id="kwb">👑 看我秀：國王抵達對方底線即獲勝！</div>
 
-<!-- ERROR 404 OVERLAY -->
-<div id="error404-overlay">
-  <div class="error404-text">ERROR 404</div>
-  <div class="error404-sub">伺服器崩潰中...</div>
-  <div class="error404-countdown" id="error404-countdown"></div>
-</div>
-
-<!-- SERVER FIXED OVERLAY -->
-<div id="server-fixed-overlay">
-  <div class="server-fixed-text" id="server-fixed-text"></div>
-</div>
-
-<!-- KING WALK BANNER -->
-<div id="king-walk-banner">👑 看我秀技能：國王抵達底線即勝利！</div>
-
-<!-- STATUS BAR -->
-<div class="status-bar" id="status-bar"></div>
-
-<!-- DRAG GHOST -->
-<div class="drag-ghost" id="drag-ghost" style="display:none"></div>
+<div id="toast"></div>
+<div class="ghost" id="ghost"></div>
 
 <script>
-// ═══════════════════════════════════════════════
-//  FIREBASE SETUP
-// ═══════════════════════════════════════════════
-const firebaseConfig = {
-  apiKey: "AIzaSyDzIXHlM0TyySFC7qNOsvFaD1X7uk58HXs",
-  authDomain: "team-chess-2989a.firebaseapp.com",
-  projectId: "team-chess-2989a",
-  storageBucket: "team-chess-2989a.firebasestorage.app",
-  messagingSenderId: "562832397441",
-  appId: "1:562832397441:web:f98d61763cb8b1ac19e980",
-  measurementId: "G-D9340S9MH1",
-  databaseURL: "https://team-chess-2989a-default-rtdb.firebaseio.com"
-};
-firebase.initializeApp(firebaseConfig);
-const db = firebase.database();
+// ════════════════════════════
+// FIREBASE
+// ════════════════════════════
+const FB_CFG={apiKey:"AIzaSyDzIXHlM0TyySFC7qNOsvFaD1X7uk58HXs",authDomain:"team-chess-2989a.firebaseapp.com",projectId:"team-chess-2989a",storageBucket:"team-chess-2989a.firebasestorage.app",messagingSenderId:"562832397441",appId:"1:562832397441:web:f98d61763cb8b1ac19e980",databaseURL:"https://team-chess-2989a-default-rtdb.firebaseio.com"};
+firebase.initializeApp(FB_CFG);
+const db=firebase.database();
 
-// ═══════════════════════════════════════════════
-//  CONSTANTS & DATA
-// ═══════════════════════════════════════════════
-const PIECES = {
-  wK:'♔',wQ:'♕',wR:'♖',wB:'♗',wN:'♘',wP:'♙',
-  bK:'♚',bQ:'♛',bR:'♜',bB:'♝',bN:'♞',bP:'♟'
+// ════════════════════════════
+// PIECE GLYPHS
+// White = hollow (♔♕♖♗♘♙)  Black = solid (♚♛♜♝♞♟)
+// ════════════════════════════
+const GLYPH={wK:'♔',wQ:'♕',wR:'♖',wB:'♗',wN:'♘',wP:'♙',bK:'♚',bQ:'♛',bR:'♜',bB:'♝',bN:'♞',bP:'♟'};
+
+// ════════════════════════════
+// SKILLS — only your 7
+// ════════════════════════════
+const SK={
+  horse_die:{name:'你馬死了',icon:'☠️',desc:'對方雙馬開局暴斃',type:'start-passive'},
+  vase_queen:{name:'她只是個花瓶',icon:'💐',desc:'對方皇后的移動距離上限變為一格',type:'start-passive'},
+  king_bomb:{name:'王炸',icon:'💣',desc:'開局炸掉自家國王，己方所有棋子都被吃掉後才算輸',type:'start-passive'},
+  rook_pierce:{name:'誰管你啊',icon:'🚂',desc:'城堡共一次機會：無視障礙物直線吃掉任意敵方棋子（不能吃國王）',type:'active'},
+  king_walk:{name:'看我秀',icon:'👑',desc:'當己方國王抵達對方底線時直接獲得勝利',type:'passive'},
+  dont_play:{name:'我不玩了',icon:'💢',desc:'當你被將殺時，直接炸掉伺服器（強制平局並重新擺盤）',type:'passive'},
+  yuanx:{name:'原X牛逼',icon:'🙏',desc:'原X牛逼（沒有任何效果，不要用你的技能，用我的）',type:'active-useless'},
 };
 
-// Skills definition
-const SKILLS_DATA = {
- 
-  horse_die: {
-    name:'你馬死了',icon:'☠️',
-    desc:'對方雙馬開局暴斃',
-    cooldown:0, type:'game-start-passive',
-    onGameStart: true
-  },
-  vase_queen: {
-    name:'她只是個花瓶',icon:'💐',
-    desc:'對方皇后的移動距離上限變為一格',
-    cooldown:0, type:'game-start-passive',
-    onGameStart: true
-  },
-  king_bomb: {
-    name:'王炸',icon:'💣',
-    desc:'開局炸掉自家國王，己方所有棋子都被吃掉才算輸（對方無法將殺）',
-    cooldown:0, type:'game-start-passive',
-    onGameStart: true
-  },
-  rook_pierce: {
-    name:'誰管你啊',icon:'🚂',
-    desc:'己方城堡共有一次機會，無視所有障礙物直線吃掉任意棋子（不能吃國王）',
-    cooldown:0, type:'select-rook-pierce', usesLeft: 1
-  },
-  king_walk_win: {
-    name:'看我秀',icon:'👑',
-    desc:'當己方國王抵達對方底線時直接獲得勝利',
-    cooldown:0, type:'passive-check'
-  },
-  dont_play: {
-    name:'我不玩了',icon:'💢',
-    desc:'當你被將殺時，直接炸掉伺服器（強制平局並重新擺盤）',
-    cooldown:0, type:'passive-on-checkmate'
-  },
-  yuanx: {
-    name:'原X牛逼',icon:'🙏',
-    desc:'原X牛逼（沒有任何效果。不要用你的技能，用我的）',
-    cooldown:0, type:'instant-useless'
+// ════════════════════════════
+// STATE
+// ════════════════════════════
+let myName='',myColor=null,roomId='',roomRef=null,gs=null;
+let selSq=null,legalMvs=[],activeSkill=null,sk2Src=null;
+let pendingPromo=null,dragSrc=null;
+let frozenPcs={};
+// Derived from gs.sf
+let queenLimFor=null,kingBombFor=null,kingWalkFor=null,dontPlayFor=null;
+let rookPierceLeft={white:0,black:0};
+let e404Active=false;
+
+// ════════════════════════════
+// LOBBY
+// ════════════════════════════
+function createRoom(){
+  const name=document.getElementById('pname').value.trim();
+  const rid=document.getElementById('ridc').value.trim().toUpperCase();
+  if(!name)return toast('請輸入名字');
+  if(rid.length<2)return toast('房號至少2碼');
+  myName=name;roomId=rid;
+  db.ref('rooms/'+rid).once('value').then(s=>{
+    if(s.exists())return toast('房號已存在，換一個試試');
+    db.ref('rooms/'+rid).set({
+      white:{name,skill:null,ready:false},black:null,
+      board:null,turn:'white',status:'waiting',
+      hist:[],capW:[],capB:[],chat:{},
+      sfx:{frozen:{}},sf:{},lastMove:null,
+      cr:{wK:1,wRh:1,wRa:1,bK:1,bRh:1,bRa:1},ep:null
+    });
+    myColor='white';enterGame();
+  });
+}
+function joinRoom(){
+  const name=document.getElementById('pname').value.trim();
+  const rid=document.getElementById('ridj').value.trim().toUpperCase();
+  if(!name)return toast('請輸入名字');
+  if(!rid)return toast('請輸入房號');
+  myName=name;roomId=rid;
+  db.ref('rooms/'+rid).once('value').then(s=>{
+    if(!s.exists())return toast('找不到此房號');
+    const d=s.val();
+    if(d.black)return toast('房間已滿');
+    db.ref('rooms/'+rid+'/black').set({name,skill:null,ready:false});
+    myColor='black';enterGame();
+  });
+}
+
+// ════════════════════════════
+// ENTER GAME
+// ════════════════════════════
+function enterGame(){
+  document.getElementById('lobby').classList.remove('on');
+  document.getElementById('game').classList.add('on');
+  document.getElementById('rlbl').textContent='房間: '+roomId;
+  roomRef=db.ref('rooms/'+roomId);
+  openSkillModal();
+  roomRef.on('value',s=>{if(s.exists()){gs=s.val();syncUI();}});
+  db.ref('rooms/'+roomId+'/chat').on('child_added',s=>renderChatMsg(s.val()));
+}
+
+// ════════════════════════════
+// SKILL SELECTION
+// ════════════════════════════
+let pickedSk=null;
+function openSkillModal(){
+  pickedSk=null;
+  const g=document.getElementById('skgrid');g.innerHTML='';
+  Object.entries(SK).forEach(([id,sk])=>{
+    const el=document.createElement('div');
+    el.className='sko';el.dataset.id=id;
+    el.innerHTML=`<div class="sko-ic">${sk.icon}</div><div><div class="sko-nm">${sk.name}</div><div class="sko-ds">${sk.desc}</div></div>`;
+    el.onclick=()=>{document.querySelectorAll('.sko').forEach(x=>x.classList.remove('sel'));el.classList.add('sel');pickedSk=id;};
+    g.appendChild(el);
+  });
+  document.getElementById('sk-ov').classList.add('on');
+}
+function confirmSkill(){
+  if(!pickedSk)return toast('請選擇一個技能');
+  document.getElementById('sk-ov').classList.remove('on');
+  roomRef.update({[myColor]:{name:myName,skill:pickedSk,ready:true}});
+  roomRef.once('value').then(s=>{
+    const d=s.val();
+    if(d.white?.ready&&d.black?.ready&&!d.board)startGame();
+  });
+}
+
+// ════════════════════════════
+// START GAME
+// ════════════════════════════
+function startGame(){
+  if(myColor!=='white')return;
+  const board=initBoard();
+  const sf={queenLim:null,kingBombFor:null,kingWalkFor:null,dontPlayFor:null,rpl:{white:0,black:0}};
+  const msgs=[];
+
+  function applyStart(sid,color){
+    const opp=color==='white'?'black':'white';
+    const mP=color==='white'?'w':'b';
+    const oP=color==='white'?'b':'w';
+    const n=gs[color]?.name||color;
+    const on=gs[opp]?.name||opp;
+    if(sid==='horse_die'){
+      for(let r=0;r<8;r++)for(let c=0;c<8;c++)if(board[r][c]===oP+'N')board[r][c]=null;
+      msgs.push('☠️ '+n+'【你馬死了】！'+on+'的兩匹馬直接暴斃！');
+    }
+    if(sid==='vase_queen'){sf.queenLim=opp;msgs.push('💐 '+n+'【她只是個花瓶】！'+on+'的皇后只能走1格！');}
+    if(sid==='king_bomb'){
+      for(let r=0;r<8;r++)for(let c=0;c<8;c++)if(board[r][c]===mP+'K')board[r][c]=null;
+      sf.kingBombFor=color;msgs.push('💣 '+n+'【王炸】！自家國王直接消失——所有棋子被吃光才算輸！');
+    }
+    if(sid==='king_walk'){sf.kingWalkFor=color;msgs.push('👑 '+n+'【看我秀】！國王走到底線即勝！');}
+    if(sid==='dont_play'){sf.dontPlayFor=color;msgs.push('💢 '+n+'【我不玩了】潛伏中……');}
+    if(sid==='rook_pierce'){sf.rpl[color]=1;msgs.push('🚂 '+n+'【誰管你啊】！城堡獲得1次穿透攻擊！');}
+    if(sid==='yuanx'){msgs.push('🙏 '+n+'【原X牛逼】……什麼都沒有發生。');}
   }
-};
+  if(gs.white?.skill)applyStart(gs.white.skill,'white');
+  if(gs.black?.skill)applyStart(gs.black.skill,'black');
 
-// Initial board
-function initialBoard() {
-  const b = Array(8).fill(null).map(()=>Array(8).fill(null));
-  const order = ['R','N','B','Q','K','B','N','R'];
-  for(let i=0;i<8;i++){
-    b[0][i]='b'+order[i];
-    b[1][i]='bP';
-    b[6][i]='wP';
-    b[7][i]='w'+order[i];
-  }
+  roomRef.update({board,turn:'white',status:'playing',hist:[],capW:[],capB:[],
+    sfx:{frozen:{}},sf,lastMove:null,check:null,winner:null,
+    cr:{wK:1,wRh:1,wRa:1,bK:1,bRh:1,bRa:1},ep:null});
+  setTimeout(()=>{
+    sysChat('♟ 遊戲開始！');
+    msgs.forEach((m,i)=>setTimeout(()=>sysChat(m),(i+1)*350));
+  },200);
+}
+
+function initBoard(){
+  const b=Array(8).fill(null).map(()=>Array(8).fill(null));
+  ['R','N','B','Q','K','B','N','R'].forEach((t,i)=>{b[0][i]='b'+t;b[7][i]='w'+t;});
+  for(let i=0;i<8;i++){b[1][i]='bP';b[6][i]='wP';}
   return b;
 }
 
-// ═══════════════════════════════════════════════
-//  GLOBAL STATE
-// ═══════════════════════════════════════════════
-let myName = '';
-let myColor = null; // 'white' | 'black'
-let roomId = '';
-let roomRef = null;
-let gameState = null; // live from firebase
-let selectedSq = null;
-let legalMoves = [];
-let activeSkill = null; // {skillId, step:'src'|'dest'|'target'|null, src:null}
-let skillStep2Src = null;
-let pendingPromotion = null; // {from, to}
-let mySkills = []; // [{id, cooldown}]
-let theirSkills = [];
-let frozenPieces = {}; // key "r,c" -> turns remaining
-let shieldedPieces = {}; // key "r,c" -> turns remaining
-let clonedPieces = {}; // key "r,c" -> turns remaining
-let hasteActive = false;
-let hasteUsed = false;
-let dragSrc = null;
+// ════════════════════════════
+// SYNC UI
+// ════════════════════════════
+function syncUI(){
+  if(!gs)return;
+  document.getElementById('tbn-w').textContent=gs.white?.name||'—';
+  document.getElementById('tbn-b').textContent=gs.black?.name||'等待…';
+  const wsk=gs.white?.skill,bsk=gs.black?.skill;
+  document.getElementById('tbs-w').textContent=wsk?(SK[wsk].icon+' '+SK[wsk].name):'—';
+  document.getElementById('tbs-b').textContent=bsk?(SK[bsk].icon+' '+SK[bsk].name):'—';
+  if(gs.white?.ready&&gs.black?.ready&&!gs.board&&myColor==='white')startGame();
+  if(!gs.board){document.getElementById('tb-turn').textContent='等待中…';renderBoard();return;}
 
-// Special skill state
-let queenLimitedFor = null;  // 'white'|'black' whose queen is limited
-let kingBombFor = null;      // color whose king was removed (王炸)
-let kingWalkWinFor = null;   // color that wins by king reaching far rank
-let dontPlayFor = null;      // color with 我不玩了
-let rookPierceLeft = {white:0, black:0};
-let error404Active = false;
+  // Sync special flags
+  const sf=gs.sf||{};
+  queenLimFor=sf.queenLim||null;
+  kingBombFor=sf.kingBombFor||null;
+  kingWalkFor=sf.kingWalkFor||null;
+  dontPlayFor=sf.dontPlayFor||null;
+  rookPierceLeft=sf.rpl||{white:0,black:0};
+  frozenPcs=gs.sfx?.frozen||{};
 
-// ═══════════════════════════════════════════════
-//  LOBBY
-// ═══════════════════════════════════════════════
-function createRoom() {
-  const name = document.getElementById('player-name').value.trim();
-  const rid = document.getElementById('room-id-create').value.trim();
-  if(!name){ showStatus('請輸入你的名字'); return; }
-  if(!rid || rid.length < 2){ showStatus('房號至少2位'); return; }
-  myName = name;
-  roomId = rid.toUpperCase();
-  const ref = db.ref('rooms/'+roomId);
-  ref.once('value').then(snap=>{
-    if(snap.exists()){ showStatus('房號已存在，請換一個'); return; }
-    ref.set({
-      white: { name: myName, ready: false, skills: [] },
-      black: null,
-      board: null,
-      turn: 'white',
-      status: 'waiting',
-      moveHistory: [],
-      capturedWhite: [],
-      capturedBlack: [],
-      chat: {},
-      skillEffects: { frozen:{}, shielded:{}, cloned:{} },
-      lastMove: null
-    });
-    myColor = 'white';
-    enterGame();
-  });
-}
+  document.getElementById('kwb').classList.toggle('on',!!kingWalkFor);
 
-function joinRoom() {
-  const name = document.getElementById('player-name').value.trim();
-  const rid = document.getElementById('room-id-join').value.trim();
-  if(!name){ showStatus('請輸入你的名字'); return; }
-  if(!rid){ showStatus('請輸入房號'); return; }
-  myName = name;
-  roomId = rid.toUpperCase();
-  const ref = db.ref('rooms/'+roomId);
-  ref.once('value').then(snap=>{
-    if(!snap.exists()){ showStatus('找不到此房號'); return; }
-    const d = snap.val();
-    if(d.black){ showStatus('此房間已滿'); return; }
-    ref.update({ black: { name: myName, ready: false, skills: [] } });
-    myColor = 'black';
-    enterGame();
-  });
-}
+  // Host checks: 王炸 all-gone
+  if(kingBombFor&&gs.status==='playing'&&myColor==='white'){
+    const p=kingBombFor==='white'?'w':'b';
+    let any=false;
+    for(let r=0;r<8;r++)for(let c=0;c<8;c++)if(gs.board[r][c]?.startsWith(p))any=true;
+    if(!any)roomRef.update({status:'checkmate',winner:kingBombFor==='white'?'black':'white'});
+  }
+  // Host checks: 看我秀 king at back rank
+  if(kingWalkFor&&gs.status==='playing'&&myColor==='white'){
+    const p=kingWalkFor==='white'?'w':'b';
+    const tRow=kingWalkFor==='white'?0:7;
+    for(let c=0;c<8;c++){
+      if(gs.board[tRow][c]===p+'K'){
+        roomRef.update({status:'checkmate',winner:kingWalkFor});
+        sysChat('👑 '+gs[kingWalkFor].name+'的國王抵達底線！【看我秀】勝利！');
+      }
+    }
+  }
 
-// ═══════════════════════════════════════════════
-//  ENTER GAME
-// ═══════════════════════════════════════════════
-function enterGame() {
-  document.getElementById('lobby').classList.remove('active');
-  document.getElementById('game').classList.add('active');
-  document.getElementById('room-label').textContent = '房號: '+roomId;
-  document.getElementById('chat-room-tag').textContent = '#'+roomId;
+  const isMyTurn=gs.turn===myColor;
+  const turnTxt=gs.turn==='white'?'白方':'黑方';
+  const tEl=document.getElementById('tb-turn');
+  const mtEl=document.getElementById('mob-turn');
 
-  roomRef = db.ref('rooms/'+roomId);
-
-  // show skill selection
-  openSkillModal();
-
-  // Listen for changes
-  roomRef.on('value', snap=>{
-    if(!snap.exists()) return;
-    gameState = snap.val();
-    syncUI();
-  });
-
-  // Listen for chat
-  db.ref('rooms/'+roomId+'/chat').on('child_added', snap=>{
-    renderChatMsg(snap.val());
-  });
-}
-
-// ═══════════════════════════════════════════════
-//  SKILL SELECTION
-// ═══════════════════════════════════════════════
-let selectedSkillIds = [];
-
-function openSkillModal() {
-  const grid = document.getElementById('skill-pick-grid');
-  grid.innerHTML = '';
-  selectedSkillIds = [];
-  Object.entries(SKILLS_DATA).forEach(([id,sk])=>{
-    const btn = document.createElement('div');
-    btn.className = 'skill-pick-btn';
-    btn.dataset.id = id;
-    btn.innerHTML = `<div class="spb-icon">${sk.icon}</div>
-      <div class="spb-name">${sk.name}</div>
-      <div class="spb-desc">${sk.desc}</div>`;
-    btn.onclick = ()=>toggleSkillPick(id, btn);
-    grid.appendChild(btn);
-  });
-  document.getElementById('skill-modal').classList.add('open');
-}
-
-function toggleSkillPick(id, btn) {
-  if(selectedSkillIds.includes(id)){
-    selectedSkillIds = selectedSkillIds.filter(x=>x!==id);
-    btn.classList.remove('selected');
+  if(gs.status==='checkmate'){
+    tEl.textContent='遊戲結束';
+    if(!e404Active){
+      if(dontPlayFor&&dontPlayFor!==gs.winner)triggerE404();
+      else openGameOver(gs.winner);
+    }
+  } else if(gs.status==='draw'){
+    tEl.textContent='和棋';
+    if(!e404Active)openGameOver(null);
   } else {
-    if(selectedSkillIds.length >= 2){ showStatus('最多選2個技能'); return; }
-    selectedSkillIds.push(id);
-    btn.classList.add('selected');
+    tEl.textContent=isMyTurn?'✦ 你的回合':turnTxt+'回合';
+    tEl.style.color=isMyTurn?'var(--gold2)':'var(--dim)';
+    if(mtEl)mtEl.textContent=isMyTurn?'✦ 你的回合':turnTxt;
   }
+
+  // Mobile skill btn
+  const mySk=gs[myColor]?.skill;
+  const mobBtn=document.getElementById('mob-sk');
+  if(mySk&&mobBtn){
+    document.getElementById('mob-sk-ic').textContent=SK[mySk].icon;
+    document.getElementById('mob-sk-nm').textContent=SK[mySk].name;
+    const canAct=SK[mySk].type==='active'||SK[mySk].type==='active-useless';
+    const hasUse=mySk==='rook_pierce'?(rookPierceLeft[myColor]||0)>0:true;
+    mobBtn.classList.toggle('act',activeSkill===mySk);
+    mobBtn.classList.toggle('cd',!canAct||!hasUse);
+  }
+
+  renderBoard();
+  renderCaptured();
+  renderHistory();
 }
 
-function confirmSkills() {
-  if(selectedSkillIds.length < 1){ showStatus('請至少選1個技能'); return; }
-  mySkills = selectedSkillIds.map(id=>({ id, cooldown:0 }));
-  // Push to firebase
-  roomRef.update({ [myColor]: { name: myName, ready: true, skills: mySkills } });
-  document.getElementById('skill-modal').classList.remove('open');
+// ════════════════════════════
+// BOARD RENDER
+// ════════════════════════════
+function renderBoard(){
+  const el=document.getElementById('board');
+  el.innerHTML='';
+  if(!gs?.board)return;
+  const board=gs.board;
+  const flip=myColor==='black';
+  const rows=flip?[0,1,2,3,4,5,6,7]:[7,6,5,4,3,2,1,0];
+  const cols=flip?[7,6,5,4,3,2,1,0]:[0,1,2,3,4,5,6,7];
 
-  // If both players ready → start game
-  roomRef.once('value').then(snap=>{
-    const d = snap.val();
-    const wReady = d.white && d.white.ready;
-    const bReady = d.black && d.black.ready;
-    if(wReady && bReady && !d.board) {
-      startGame();
-    }
+  // Compute piece font size from actual board element size
+  // We'll set it via CSS variable once board dimensions are known
+  requestAnimationFrame(()=>{
+    const bw=el.offsetWidth;
+    const cellPx=Math.floor(bw/8);
+    const pcSize=Math.floor(cellPx*0.75);
+    el.style.fontSize=pcSize+'px';
   });
-}
-
-function startGame() {
-  if(myColor !== 'white') return; // only host starts
-  const board = initialBoard();
-
-  // Apply game-start passive skills
-  const specialFlags = { queenLimited: null, kingBombFor: null, kingWalkWinFor: null, dontPlayFor: null, rookPierceLeft: {white:0,black:0} };
-  const allSkills = [
-    ...((gameState.white?.skills||[]).map(s=>({...s,color:'white'}))),
-    ...((gameState.black?.skills||[]).map(s=>({...s,color:'black'})))
-  ];
-  const chatMsgs = [];
-
-  for(const sk of allSkills) {
-    const def = SKILLS_DATA[sk.id];
-    if(!def) continue;
-    const c = sk.color;
-    const opp = c==='white'?'black':'white';
-    const myPre = c==='white'?'w':'b';
-    const oppPre = c==='white'?'b':'w';
-
-    if(sk.id==='horse_die') {
-      // Remove opponent's knights
-      for(let r=0;r<8;r++) for(let col=0;col<8;col++) {
-        if(board[r][col]===oppPre+'N') board[r][col]=null;
-      }
-      chatMsgs.push('☠️ '+gameState[c].name+' 的技能【你馬死了】發動！'+gameState[opp].name+' 的兩匹馬直接暴斃！');
-    }
-    if(sk.id==='vase_queen') {
-      specialFlags.queenLimited = opp;
-      chatMsgs.push('💐 '+gameState[c].name+' 的技能【她只是個花瓶】發動！'+gameState[opp].name+' 的皇后移動距離限制為1格！');
-    }
-    if(sk.id==='king_bomb') {
-      for(let r=0;r<8;r++) for(let col=0;col<8;col++) {
-        if(board[r][col]===myPre+'K') board[r][col]=null;
-      }
-      specialFlags.kingBombFor = c;
-      chatMsgs.push('💣 '+gameState[c].name+' 的技能【王炸】發動！自己的國王直接消失——己方所有棋子被吃光才算輸！');
-    }
-    if(sk.id==='king_walk_win') {
-      specialFlags.kingWalkWinFor = c;
-      chatMsgs.push('👑 '+gameState[c].name+' 的技能【看我秀】發動！國王抵達對方底線即獲勝！');
-    }
-    if(sk.id==='dont_play') {
-      specialFlags.dontPlayFor = c;
-      chatMsgs.push('💢 '+gameState[c].name+' 的技能【我不玩了】潛伏中！被將殺時伺服器會爆炸...');
-    }
-    if(sk.id==='rook_pierce') {
-      specialFlags.rookPierceLeft[c] = (specialFlags.rookPierceLeft[c]||0)+1;
-      chatMsgs.push('🚂 '+gameState[c].name+' 的技能【誰管你啊】發動！城堡獲得1次穿透吃子機會！');
-    }
-    if(sk.id==='yuanx') {
-      chatMsgs.push('🙏 '+gameState[c].name+' 的技能【原X牛逼】發動！……沒有任何事情發生。');
-    }
-  }
-
-  roomRef.update({
-    board: board,
-    turn: 'white',
-    status: 'playing',
-    moveHistory: [],
-    capturedWhite: [],
-    capturedBlack: [],
-    skillEffects: { frozen:{}, shielded:{}, cloned:{} },
-    specialFlags: specialFlags,
-    lastMove: null,
-    halfmoveClock: 0,
-    castleRights: { wK:true, wR_h:true, wR_a:true, bK:true, bR_h:true, bR_a:true },
-    enPassant: null
-  });
-
-  setTimeout(()=>{ addSystemChat('♟ 遊戲開始！'); chatMsgs.forEach(m=>setTimeout(()=>addSystemChat(m),200)); }, 200);
-}
-
-// ═══════════════════════════════════════════════
-//  SYNC UI
-// ═══════════════════════════════════════════════
-function syncUI() {
-  if(!gameState) return;
-  const gs = gameState;
-
-  // Names
-  document.getElementById('name-white').textContent = gs.white ? gs.white.name : '等待玩家';
-  document.getElementById('name-black').textContent = gs.black ? gs.black.name : '等待對手…';
-
-  // Start game once both ready
-  if(gs.white?.ready && gs.black?.ready && !gs.board && myColor==='white') {
-    startGame();
-  }
-
-  if(!gs.board) {
-    document.getElementById('turn-indicator').textContent = '等待對手加入…';
-    if(gs.black && !gs.black.ready && myColor==='black') openSkillModal();
-    return;
-  }
-
-  // Skills
-  renderSkillSlots('white', gs.white?.skills || [], 'skills-white');
-  renderSkillSlots('black', gs.black?.skills || [], 'skills-black');
-
-  // Turn
-  const isMyTurn = gs.turn === myColor;
-  const tEl = document.getElementById('turn-indicator');
-  if(gs.status === 'checkmate'){
-    tEl.textContent = '將死！ '+( gs.winner==='white'?'白方':'黑方')+' 獲勝';
-    tEl.className = 'turn-indicator';
-    // 我不玩了: intercept if the loser has this skill
-    if(!error404Active) openGameOver(gs.winner);
-  } else if(gs.status === 'draw'){
-    tEl.textContent = '和棋';
-    openGameOver(null);
-  } else {
-    tEl.textContent = isMyTurn ? '✦ 你的回合' : (gs.turn==='white'?'白方回合':'黑方回合');
-    tEl.className = 'turn-indicator ' + (gs.turn==='white'?'turn-white':'turn-black');
-  }
-
-  // Active turn card
-  document.getElementById('card-white').classList.toggle('active-turn', gs.turn==='white');
-  document.getElementById('card-black').classList.toggle('active-turn', gs.turn==='black');
-
-  // Skill effects
-  frozenPieces = gs.skillEffects?.frozen || {};
-  shieldedPieces = gs.skillEffects?.shielded || {};
-  clonedPieces = gs.skillEffects?.cloned || {};
-
-  // Special flags
-  const sf = gs.specialFlags || {};
-  queenLimitedFor = sf.queenLimited || null;
-  kingBombFor = sf.kingBombFor || null;
-  kingWalkWinFor = sf.kingWalkWinFor || null;
-  dontPlayFor = sf.dontPlayFor || null;
-  rookPierceLeft = sf.rookPierceLeft || {white:0,black:0};
-
-  // King walk banner
-  const banner = document.getElementById('king-walk-banner');
-  if(kingWalkWinFor) banner.classList.add('show');
-  else banner.classList.remove('show');
-
-  // 我不玩了 + checkmate → ERROR 404
-  if(gs.status==='checkmate' && dontPlayFor && gs.winner !== dontPlayFor && !error404Active) {
-    triggerError404();
-    return;
-  }
-
-  // 王炸 win condition: check if all pieces of kingBombFor color are gone
-  if(kingBombFor && gs.status==='playing') {
-    const pre = kingBombFor==='white'?'w':'b';
-    let anyLeft = false;
-    for(let r=0;r<8;r++) for(let c=0;c<8;c++) if(gs.board[r][c]&&gs.board[r][c][0]===pre) anyLeft=true;
-    if(!anyLeft && myColor==='white') {
-      const opp = kingBombFor==='white'?'black':'white';
-      roomRef.update({status:'checkmate', winner:opp});
-    }
-  }
-
-  // 看我秀: check king position
-  if(kingWalkWinFor && gs.status==='playing' && myColor==='white') {
-    const pre = kingWalkWinFor==='white'?'w':'b';
-    const targetRow = kingWalkWinFor==='white'?0:7;
-    for(let c=0;c<8;c++) {
-      if(gs.board[targetRow][c]===pre+'K') {
-        roomRef.update({status:'checkmate', winner:kingWalkWinFor});
-        addSystemChat('👑 '+gs[kingWalkWinFor].name+' 的國王抵達底線！【看我秀】技能勝利！');
-        break;
-      }
-    }
-  }
-
-  // Board
-  renderBoard(gs.board, gs.lastMove, gs.check);
-
-  // Captured
-  renderCaptured(gs.capturedWhite||[], gs.capturedBlack||[]);
-
-  // Move history
-  renderMoveHistory(gs.moveHistory||[]);
-}
-
-// ═══════════════════════════════════════════════
-//  SKILL SLOTS RENDER
-// ═══════════════════════════════════════════════
-function renderSkillSlots(color, skills, containerId) {
-  const el = document.getElementById(containerId);
-  el.innerHTML = '';
-  if(!skills || !skills.length) return;
-  skills.forEach((sk,i)=>{
-    const def = SKILLS_DATA[sk.id];
-    if(!def) return;
-    const cd = sk.cooldown||0;
-    const slot = document.createElement('div');
-    slot.className = 'skill-slot has-skill' + (cd>0?' on-cooldown':'');
-    if(activeSkill && activeSkill.skillId===sk.id && color===myColor) slot.classList.add('skill-active');
-    slot.innerHTML = `<span class="skill-icon">${def.icon}</span>
-      <span class="skill-name">${def.name}</span>
-      ${cd>0?`<span class="skill-cooldown">冷卻:${cd}</span>`:''}`;
-    slot.title = def.desc;
-    if(color===myColor) {
-      slot.onclick = ()=>handleSkillClick(sk.id, cd, slot);
-    } else {
-      slot.onclick = ()=>{ document.getElementById('skill-desc-box').textContent = def.desc; };
-    }
-    el.appendChild(slot);
-  });
-}
-
-function handleSkillClick(skillId, cd, slotEl) {
-  if(gameState?.turn !== myColor){ showStatus('不是你的回合'); return; }
-  if(cd > 0){ showStatus('技能冷卻中'); return; }
-  const def = SKILLS_DATA[skillId];
-  document.getElementById('skill-desc-box').textContent = def.desc;
-
-  if(activeSkill?.skillId === skillId){
-    // deactivate
-    activeSkill = null;
-    skillStep2Src = null;
-    clearHighlights();
-    showStatus('取消技能');
-    return;
-  }
-  activeSkill = { skillId, step: 'target' };
-  skillStep2Src = null;
-  clearHighlights();
-
-  if(def.type === 'instant'){
-    applySkillInstant(skillId);
-    activeSkill = null;
-    return;
-  }
-  if(def.type === 'instant-useless'){
-    showStatus('原X牛逼！……什麼都沒發生。', 'gold');
-    addSystemChat('🙏 '+myName+' 使用了【原X牛逼】！什麼都沒有發生。');
-    activeSkill = null;
-    return;
-  }
-  if(def.type === 'game-start-passive'){
-    showStatus('此技能在開局時自動發動，無法手動使用');
-    activeSkill = null;
-    return;
-  }
-  if(def.type === 'passive-check' || def.type === 'passive-on-checkmate'){
-    showStatus('此技能為被動技能，自動觸發');
-    activeSkill = null;
-    return;
-  }
-  if(def.type === 'select-rook-pierce'){
-    const uses = rookPierceLeft[myColor]||0;
-    if(uses <= 0){ showStatus('穿透機會已用盡'); activeSkill = null; return; }
-    highlightSkillTargets(skillId);
-    showStatus('🚂 選擇你的城堡（穿透直線吃子）', 'blue');
-    return;
-  }
-
-  // Highlight targets
-  highlightSkillTargets(skillId);
-  showStatus(`技能「${def.name}」已就緒，點選目標`, 'blue');
-  slotEl.classList.add('skill-active');
-}
-
-function highlightSkillTargets(skillId) {
-  const board = gameState?.board;
-  if(!board) return;
-  const sq = getAllSquares();
-  sq.forEach(el=>el.classList.remove('skill-target'));
-  const def = SKILLS_DATA[skillId];
-
-  const myPre = myColor==='white'?'w':'b';
-  const oppPre = myColor==='white'?'b':'w';
-  for(let r=0;r<8;r++) for(let c=0;c<8;c++){
-    const piece = board[r][c];
-    const mine = piece && piece[0]===myPre;
-    const theirs = piece && piece[0]===oppPre;
-    let tgt = false;
-    if(def.type==='select-src-then-dest') tgt = mine;
-    else if(def.type==='select-enemy') tgt = theirs;
-    else if(def.type==='select-own') tgt = mine;
-    else if(def.type==='select-own-pawn') tgt = mine && piece && piece[1]==='P';
-    else if(def.type==='select-two-own') tgt = mine;
-    else if(def.type==='select-any-sq') tgt = true;
-    else if(def.type==='select-rook-pierce') tgt = mine && piece && piece[1]==='R';
-    if(tgt) getSquareEl(r,c)?.classList.add('skill-target');
-  }
-}
-
-function applySkillInstant(skillId) {
-  if(skillId==='haste'){
-    hasteActive = true;
-    hasteUsed = false;
-    showStatus('急速！本回合可再移動一次', 'blue');
-    deductSkillCooldown(skillId);
-  } else if(skillId==='reveal'){
-    showStatus('透視無效果（保留未來用）', 'blue');
-    deductSkillCooldown(skillId);
-  }
-}
-
-function deductSkillCooldown(skillId) {
-  if(!gameState) return;
-  const skills = [...(gameState[myColor]?.skills||[])];
-  const idx = skills.findIndex(s=>s.id===skillId);
-  if(idx>=0) skills[idx] = {...skills[idx], cooldown: SKILLS_DATA[skillId].cooldown};
-  roomRef.update({ [myColor]: {...gameState[myColor], skills} });
-}
-
-function tickSkillCooldowns(color) {
-  if(!gameState) return;
-  const skills = [...(gameState[color]?.skills||[])];
-  const updated = skills.map(s=>({...s, cooldown: Math.max(0,(s.cooldown||0)-1)}));
-  roomRef.update({ [color]: {...gameState[color], skills: updated} });
-}
-
-// ═══════════════════════════════════════════════
-//  BOARD RENDER
-// ═══════════════════════════════════════════════
-function renderBoard(board, lastMove, checkColor) {
-  const el = document.getElementById('chess-board');
-  el.innerHTML = '';
-
-  const flip = (myColor === 'black');
-  const rows = flip ? [0,1,2,3,4,5,6,7] : [7,6,5,4,3,2,1,0];
-  const cols = flip ? [7,6,5,4,3,2,1,0] : [0,1,2,3,4,5,6,7];
 
   rows.forEach((r,ri)=>{
     cols.forEach((c,ci)=>{
-      const sq = document.createElement('div');
-      sq.className = 'sq ' + ((r+c)%2===0?'light':'dark');
-      sq.dataset.r = r; sq.dataset.c = c;
+      const sq=document.createElement('div');
+      sq.className='sq '+((r+c)%2===0?'l':'d');
+      sq.dataset.r=r;sq.dataset.c=c;
 
-      // Coordinates
-      if(ri===7){ const f=document.createElement('span'); f.className='coord-file'; f.textContent='abcdefgh'[c]; sq.appendChild(f); }
-      if(ci===0){ const rk=document.createElement('span'); rk.className='coord-rank'; rk.textContent=(r+1); sq.appendChild(rk); }
+      // Coord labels
+      if(ri===7){const f=document.createElement('span');f.className='cfile';f.textContent='abcdefgh'[c];sq.appendChild(f);}
+      if(ci===0){const rk=document.createElement('span');rk.className='crank';rk.textContent=r+1;sq.appendChild(rk);}
 
-      // Highlights
-      if(lastMove && ((lastMove.fr===r&&lastMove.fc===c)||(lastMove.tr===r&&lastMove.tc===c))) sq.classList.add('last-move');
-      if(legalMoves.some(m=>m[0]===r&&m[1]===c)) sq.classList.add('highlight');
-      if(selectedSq && selectedSq[0]===r && selectedSq[1]===c) sq.classList.add('selected');
-
-      // Check
-      if(checkColor && board[r] && board[r][c]){
-        const k = checkColor==='white'?'wK':'bK';
-        if(board[r][c]===k) sq.classList.add('in-check');
-      }
+      // State highlights
+      const lm=gs.lastMove;
+      if(lm&&((lm.fr===r&&lm.fc===c)||(lm.tr===r&&lm.tc===c)))sq.classList.add('last');
+      if(selSq&&selSq[0]===r&&selSq[1]===c)sq.classList.add('sel');
+      if(legalMvs.some(m=>m[0]===r&&m[1]===c))sq.classList.add('hi');
+      if(gs.check){const ck=gs.check==='white'?'wK':'bK';if(board[r][c]===ck)sq.classList.add('chk');}
+      if(activeSkill&&isSkillTgt(r,c))sq.classList.add('sk-t');
 
       // Piece
-      const piece = board[r] && board[r][c];
-      if(piece && PIECES[piece]){
-        const pEl = document.createElement('span');
-        pEl.className = 'piece';
-        pEl.textContent = PIECES[piece];
-        const key = r+','+c;
-        if(frozenPieces[key]) pEl.classList.add('skill-frozen');
-        if(shieldedPieces[key]) pEl.classList.add('skill-buffed');
-
-        // Drag
-        // Visual: queen limited
-        const pieceColor2 = piece[0]==='w'?'white':'black';
-        if(piece[1]==='Q' && queenLimitedFor===pieceColor2){
-          pEl.title='💐 花瓶皇后：移動限制1格';
-          pEl.style.filter='drop-shadow(0 0 6px #ff69b4) saturate(0.5)';
-        }
-        // Visual: king-bomb marker (show ghostly if king is removed for that color)
-        if(piece[1]==='K' && kingBombFor===pieceColor2){
-          pEl.style.opacity='0.25';
-          pEl.title='💣 王炸：國王已消失';
-        }
-        pEl.draggable = true;
-        pEl.addEventListener('dragstart', e=>onDragStart(e,r,c,piece));
-        pEl.addEventListener('dragend', e=>onDragEnd(e));
-        sq.appendChild(pEl);
+      const p=board[r][c];
+      if(p&&GLYPH[p]){
+        const pc=document.createElement('div');
+        pc.className='pc '+(p[0]==='w'?'wp':'bp');
+        pc.textContent=GLYPH[p];
+        if(frozenPcs[r+','+c])pc.classList.add('frozen');
+        if(p[1]==='Q'&&queenLimFor&&queenLimFor===(p[0]==='w'?'white':'black'))pc.classList.add('limited');
+        pc.addEventListener('pointerdown',e=>ptrDown(e,r,c,p));
+        sq.appendChild(pc);
       }
-
-      // Drop targets
-      sq.addEventListener('dragover', e=>{ e.preventDefault(); sq.classList.add('drag-over'); });
-      sq.addEventListener('dragleave', ()=>sq.classList.remove('drag-over'));
-      sq.addEventListener('drop', e=>onDrop(e,r,c));
-
-      sq.addEventListener('click', ()=>handleSquareClick(r,c));
+      sq.addEventListener('click',()=>handleClick(r,c));
+      sq.addEventListener('dragover',e=>{e.preventDefault();sq.classList.add('dov');});
+      sq.addEventListener('dragleave',()=>sq.classList.remove('dov'));
+      sq.addEventListener('drop',e=>{e.preventDefault();sq.classList.remove('dov');dropOn(r,c);});
       el.appendChild(sq);
     });
   });
 }
 
-// ═══════════════════════════════════════════════
-//  DRAG & DROP
-// ═══════════════════════════════════════════════
-function onDragStart(e, r, c, piece) {
-  dragSrc = [r,c];
-  const ghost = document.getElementById('drag-ghost');
-  ghost.textContent = PIECES[piece];
-  ghost.style.display = 'block';
-  e.dataTransfer.setDragImage(document.createElement('div'),0,0);
-  document.addEventListener('dragover', moveDragGhost);
-  // Select square
-  handleSquareClick(r,c,'drag');
-}
-
-function moveDragGhost(e) {
-  const ghost = document.getElementById('drag-ghost');
-  ghost.style.left = e.clientX+'px';
-  ghost.style.top = e.clientY+'px';
-}
-
-function onDragEnd(e) {
-  document.getElementById('drag-ghost').style.display = 'none';
-  document.removeEventListener('dragover', moveDragGhost);
-  getAllSquares().forEach(sq=>sq.classList.remove('drag-over'));
-}
-
-function onDrop(e, r, c) {
-  e.preventDefault();
-  getAllSquares().forEach(sq=>sq.classList.remove('drag-over'));
-  if(!dragSrc) return;
-  if(dragSrc[0]===r && dragSrc[1]===c){ dragSrc=null; return; }
-  // Attempt move
-  const [fr,fc] = dragSrc;
-  dragSrc = null;
-  if(selectedSq && selectedSq[0]===fr && selectedSq[1]===fc){
-    if(legalMoves.some(m=>m[0]===r&&m[1]===c)){
-      executeMove(fr,fc,r,c);
+// ════════════════════════════
+// POINTER DRAG (touch + mouse)
+// ════════════════════════════
+let isDragging=false,ptrSrc=null;
+function ptrDown(e,r,c,piece){
+  if(e404Active||gs?.turn!==myColor||gs?.status!=='playing')return;
+  const mP=myColor==='white'?'w':'b';
+  if(piece[0]!==mP)return;
+  if(frozenPcs[r+','+c])return;
+  e.preventDefault();e.stopPropagation();
+  isDragging=true;ptrSrc=[r,c];dragSrc=[r,c];
+  if(!activeSkill){selSq=[r,c];legalMvs=getLegal(r,c,gs.board);renderBoard();}
+  const ghost=document.getElementById('ghost');
+  ghost.textContent=GLYPH[piece];
+  ghost.className='ghost '+(piece[0]==='w'?'wp':'bp');
+  ghost.style.display='block';
+  ghost.style.left=e.clientX+'px';ghost.style.top=e.clientY+'px';
+  const mv=ev=>{ghost.style.left=ev.clientX+'px';ghost.style.top=ev.clientY+'px';};
+  const up=ev=>{
+    ghost.style.display='none';
+    document.removeEventListener('pointermove',mv);
+    document.removeEventListener('pointerup',up);
+    if(!isDragging)return;isDragging=false;
+    const tgt=document.elementFromPoint(ev.clientX,ev.clientY)?.closest('.sq');
+    if(tgt){
+      const tr=parseInt(tgt.dataset.r),tc=parseInt(tgt.dataset.c);
+      if(ptrSrc&&!(tr===ptrSrc[0]&&tc===ptrSrc[1])){
+        if(legalMvs.some(m=>m[0]===tr&&m[1]===tc))doMove(ptrSrc[0],ptrSrc[1],tr,tc);
+        else{selSq=null;legalMvs=[];renderBoard();}
+      }
     }
-  }
+    ptrSrc=null;dragSrc=null;
+  };
+  document.addEventListener('pointermove',mv);
+  document.addEventListener('pointerup',up);
+}
+function dropOn(tr,tc){
+  if(!dragSrc)return;
+  const[fr,fc]=dragSrc;dragSrc=null;
+  if(fr===tr&&fc===tc)return;
+  if(legalMvs.some(m=>m[0]===tr&&m[1]===tc))doMove(fr,fc,tr,tc);
+  else{selSq=null;legalMvs=[];renderBoard();}
 }
 
-// ═══════════════════════════════════════════════
-//  CLICK HANDLER
-// ═══════════════════════════════════════════════
-function handleSquareClick(r, c, source) {
-  if(!gameState || !gameState.board) return;
-  const isMyTurn = gameState.turn === myColor;
-
-  // Skill mode
-  if(activeSkill){
-    handleSkillTargetClick(r,c);
-    return;
-  }
-
-  if(!isMyTurn) return;
-
-  const board = gameState.board;
-  const piece = board[r][c];
-  const myPrefix = myColor==='white'?'w':'b';
-
-  if(selectedSq){
-    const [sr,sc] = selectedSq;
-    if(legalMoves.some(m=>m[0]===r&&m[1]===c)){
-      executeMove(sr,sc,r,c);
-    } else if(piece && piece[0]===myPrefix){
-      selectedSq = [r,c];
-      legalMoves = getLegalMoves(r,c,board);
-      renderBoard(board, gameState.lastMove, gameState.check);
-    } else {
-      selectedSq = null; legalMoves = [];
-      renderBoard(board, gameState.lastMove, gameState.check);
-    }
+// ════════════════════════════
+// CLICK
+// ════════════════════════════
+function handleClick(r,c){
+  if(!gs?.board||e404Active||gs?.status!=='playing')return;
+  if(activeSkill){handleSkillTgt(r,c);return;}
+  if(gs.turn!==myColor)return;
+  const board=gs.board;
+  const mP=myColor==='white'?'w':'b';
+  const p=board[r][c];
+  if(selSq){
+    const[sr,sc]=selSq;
+    if(legalMvs.some(m=>m[0]===r&&m[1]===c))doMove(sr,sc,r,c);
+    else if(p&&p[0]===mP&&!frozenPcs[r+','+c]){selSq=[r,c];legalMvs=getLegal(r,c,board);renderBoard();}
+    else{selSq=null;legalMvs=[];renderBoard();}
   } else {
-    if(piece && piece[0]===myPrefix){
-      const key = r+','+c;
-      if(frozenPieces[key]){ showStatus('此棋子被冰凍，無法移動'); return; }
-      selectedSq = [r,c];
-      legalMoves = getLegalMoves(r,c,board);
-      renderBoard(board, gameState.lastMove, gameState.check);
+    if(p&&p[0]===mP){
+      if(frozenPcs[r+','+c]){toast('此棋子被冰凍');return;}
+      selSq=[r,c];legalMvs=getLegal(r,c,board);renderBoard();
     }
   }
 }
 
-function handleSkillTargetClick(r,c) {
-  const def = SKILLS_DATA[activeSkill.skillId];
-  const board = gameState.board;
-  const myPrefix = myColor==='white'?'w':'b';
-  const theirPrefix = myColor==='white'?'b':'w';
-
-  if(def.type === 'select-src-then-dest'){
-    if(!skillStep2Src){
-      const piece = board[r][c];
-      if(!piece || piece[0]!==myPrefix){ showStatus('請選擇己方棋子'); return; }
-      skillStep2Src = [r,c];
-      showStatus('再選擇目標空格', 'blue');
-      return;
-    } else {
-      const [sr,sc] = skillStep2Src;
-      if(board[r][c]){ showStatus('目標必須是空格'); return; }
-      // Teleport
-      applySkillEffect_teleport(sr,sc,r,c);
-    }
-  }
-  else if(def.type==='select-enemy'){
-    const piece = board[r][c];
-    if(!piece || piece[0]!==theirPrefix){ showStatus('請選擇敵方棋子'); return; }
-    applySkillEffect_freeze(r,c);
-  }
-  else if(def.type==='select-own'){
-    const piece = board[r][c];
-    if(!piece || piece[0]!==myPrefix){ showStatus('請選擇己方棋子'); return; }
-    applySkillEffect_shield(r,c);
-  }
-  else if(def.type==='select-own-pawn'){
-    const piece = board[r][c];
-    if(!piece || piece[0]!==myPrefix || piece[1]!=='P'){ showStatus('請選擇己方的兵'); return; }
-    applySkillEffect_clone(r,c);
-  }
-  else if(def.type==='select-two-own'){
-    if(!skillStep2Src){
-      const piece = board[r][c];
-      if(!piece || piece[0]!==myPrefix){ showStatus('請選擇第一個己方棋子'); return; }
-      skillStep2Src = [r,c];
-      showStatus('再選擇第二個棋子交換', 'blue');
-      return;
-    } else {
-      const [sr,sc] = skillStep2Src;
-      const piece = board[r][c];
-      if(!piece || piece[0]!==myPrefix){ showStatus('請選擇己方棋子'); return; }
-      applySkillEffect_swap(sr,sc,r,c);
-    }
-  }
-  else if(def.type==='select-any-sq'){
-    applySkillEffect_explode(r,c);
-  }
-  else if(def.type==='select-rook-pierce'){
-    if(!skillStep2Src){
-      const piece = board[r][c];
-      const myPre2 = myColor==='white'?'w':'b';
-      if(!piece || piece[0]!==myPre2 || piece[1]!=='R'){ showStatus('請選擇己方的城堡'); return; }
-      skillStep2Src = [r,c];
-      // Now highlight valid pierce targets: same row or same col, any enemy except king
-      getAllSquares().forEach(sq=>sq.classList.remove('skill-target'));
-      const oppPre2 = myColor==='white'?'b':'w';
-      for(let tr=0;tr<8;tr++) for(let tc=0;tc<8;tc++){
-        const tp = board[tr][tc];
-        if(!tp || tp[0]!==oppPre2 || tp[1]==='K') continue;
-        if(tr===r || tc===c) getSquareEl(tr,tc)?.classList.add('skill-target');
-      }
-      showStatus('選擇要穿透吃掉的敵方棋子（同行或同列）', 'blue');
-      return;
-    } else {
-      const [rookR, rookC] = skillStep2Src;
-      const tp = board[r][c];
-      const oppPre2 = myColor==='white'?'b':'w';
-      if(!tp || tp[0]!==oppPre2 || tp[1]==='K'){ showStatus('無效目標'); return; }
-      if(r!==rookR && c!==rookC){ showStatus('必須在同行或同列'); return; }
-      applySkillEffect_rookPierce(rookR, rookC, r, c);
-    }
-  }
-
-  activeSkill = null;
-  skillStep2Src = null;
-  getAllSquares().forEach(sq=>sq.classList.remove('skill-target'));
+// ════════════════════════════
+// SKILL ACTIVATION
+// ════════════════════════════
+function mobSkillClick(){
+  if(!gs?.board||gs.turn!==myColor||gs.status!=='playing')return;
+  const sk=gs[myColor]?.skill;if(!sk)return;
+  activateSkill(sk);
 }
-
-// ─── Skill Effect Implementations ───
-function applySkillEffect_teleport(sr,sc,tr,tc) {
-  const board = JSON.parse(JSON.stringify(gameState.board));
-  board[tr][tc] = board[sr][sc];
-  board[sr][sc] = null;
-  deductSkillCooldown('teleport');
-  pushBoardUpdate(board, false);
-  addSystemChat(`⚡ ${myName} 使用傳送！`);
-}
-
-function applySkillEffect_freeze(r,c) {
-  const frozen = {...(gameState.skillEffects?.frozen||{})};
-  frozen[r+','+c] = 2;
-  roomRef.child('skillEffects/frozen').set(frozen);
-  deductSkillCooldown('freeze');
-  addSystemChat(`❄️ ${myName} 冰凍了一個棋子！`);
-}
-
-function applySkillEffect_shield(r,c) {
-  const shielded = {...(gameState.skillEffects?.shielded||{})};
-  shielded[r+','+c] = 2;
-  roomRef.child('skillEffects/shielded').set(shielded);
-  deductSkillCooldown('shield');
-  addSystemChat(`🛡️ ${myName} 施加了護盾！`);
-}
-
-function applySkillEffect_clone(r,c) {
-  const board = JSON.parse(JSON.stringify(gameState.board));
-  const myPre = myColor==='white'?'w':'b';
-  // Find empty adjacent square
-  const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
-  let placed = false;
-  for(const [dr,dc] of dirs){
-    const nr=r+dr, nc=c+dc;
-    if(nr>=0&&nr<8&&nc>=0&&nc<8&&!board[nr][nc]){
-      board[nr][nc] = myPre+'P';
-      const cloned = {...(gameState.skillEffects?.cloned||{})};
-      cloned[nr+','+nc] = 3;
-      roomRef.child('skillEffects/cloned').set(cloned);
-      placed = true; break;
-    }
-  }
-  if(!placed){ showStatus('附近沒有空格複製'); return; }
-  deductSkillCooldown('clone');
-  pushBoardUpdate(board, false);
-  addSystemChat(`🔮 ${myName} 複製了一個兵！`);
-}
-
-function applySkillEffect_swap(r1,c1,r2,c2) {
-  const board = JSON.parse(JSON.stringify(gameState.board));
-  [board[r1][c1], board[r2][c2]] = [board[r2][c2], board[r1][c1]];
-  deductSkillCooldown('swap');
-  pushBoardUpdate(board, false);
-  addSystemChat(`🔄 ${myName} 交換了兩個棋子！`);
-}
-
-function applySkillEffect_explode(r,c) {
-  const board = JSON.parse(JSON.stringify(gameState.board));
-  for(let dr=-1;dr<=1;dr++) for(let dc=-1;dc<=1;dc++){
-    const nr=r+dr, nc=c+dc;
-    if(nr>=0&&nr<8&&nc>=0&&nc<8) board[nr][nc]=null;
-  }
-  deductSkillCooldown('explode');
-  pushBoardUpdate(board, true);
-  addSystemChat(`💥 ${myName} 引發了爆炸！`);
-}
-
-function applySkillEffect_rookPierce(rookR, rookC, tr, tc) {
-  const board = JSON.parse(JSON.stringify(gameState.board));
-  const target = board[tr][tc];
-  board[tr][tc] = null; // eaten piece disappears (rook stays in place)
-
-  // Deduct use from specialFlags
-  const sf = JSON.parse(JSON.stringify(gameState.specialFlags||{}));
-  sf.rookPierceLeft = sf.rookPierceLeft || {white:0, black:0};
-  sf.rookPierceLeft[myColor] = Math.max(0, (sf.rookPierceLeft[myColor]||0) - 1);
-
-  roomRef.update({ board, specialFlags: sf });
-  addSystemChat(`🚂 ${myName} 的城堡無視障礙物，直接吃掉了 ${PIECES[target]||target}！`);
-  showStatus('穿透吃子成功！', 'blue');
-}
-
-// ═══════════════════════════════════════════════
-//  MOVE EXECUTION
-// ═══════════════════════════════════════════════
-function executeMove(fr, fc, tr, tc) {
-  const board = JSON.parse(JSON.stringify(gameState.board));
-  const piece = board[fr][fc];
-  const target = board[tr][tc];
-  const castleRights = {...(gameState.castleRights||{wK:true,wR_h:true,wR_a:true,bK:true,bR_h:true,bR_a:true})};
-
-  // Check promotion
-  const isPromo = (piece==='wP'&&tr===7)||(piece==='bP'&&tr===0);
-  if(isPromo){
-    pendingPromotion = {from:[fr,fc],to:[tr,tc],board,target};
-    openPromoModal(piece[0]);
-    selectedSq = null; legalMoves = [];
+function activateSkill(sk){
+  const def=SK[sk];
+  if(def.type==='start-passive'||def.type==='passive'){return toast('此技能為被動，自動觸發');}
+  if(def.type==='active-useless'){
+    toast('原X牛逼！什麼都沒發生。','gold');
+    sysChat('🙏 '+myName+'使用了【原X牛逼】！什麼都沒有發生。');
     return;
   }
-
-  applyMoveToBoard(board, fr, fc, tr, tc, null, castleRights);
-  selectedSq = null; legalMoves = [];
+  if(sk==='rook_pierce'){
+    if((rookPierceLeft[myColor]||0)<=0)return toast('穿透機會已用盡');
+    if(activeSkill===sk){activeSkill=null;sk2Src=null;renderBoard();toast('取消技能');return;}
+    activeSkill=sk;sk2Src=null;renderBoard();
+    toast('🚂 選擇己方城堡','blue');
+  }
 }
-
-function applyMoveToBoard(board, fr, fc, tr, tc, promoTo, castleRights) {
-  const piece = board[fr][fc];
-  const target = board[tr][tc];
-  const myPre = myColor==='white'?'w':'b';
-  const theirPre = myColor==='white'?'b':'w';
-
-  // Shield check
-  const targetKey = tr+','+tc;
-  if(target && shieldedPieces[targetKey]){
-    showStatus('對方棋子有護盾，無法吃掉！');
-    selectedSq = null; legalMoves = [];
-    renderBoard(board, gameState.lastMove, gameState.check);
-    return;
-  }
-
-  board[tr][tc] = promoTo ? (myPre+promoTo) : piece;
-  board[fr][fc] = null;
-
-  // Castling
-  if(piece==='wK'){
-    castleRights.wK = false;
-    if(fc===4 && tc===6){ board[7][5]=board[7][7]; board[7][7]=null; }
-    if(fc===4 && tc===2){ board[7][3]=board[7][0]; board[7][0]=null; }
-  }
-  if(piece==='bK'){
-    castleRights.bK = false;
-    if(fc===4 && tc===6){ board[0][5]=board[0][7]; board[0][7]=null; }
-    if(fc===4 && tc===2){ board[0][3]=board[0][0]; board[0][0]=null; }
-  }
-  if(piece==='wR'){ if(fc===7) castleRights.wR_h=false; if(fc===0) castleRights.wR_a=false; }
-  if(piece==='bR'){ if(fc===7) castleRights.bR_h=false; if(fc===0) castleRights.bR_a=false; }
-
-  // En passant capture
-  const enPassant = gameState.enPassant;
-  if(piece==='wP'&&enPassant&&tr===enPassant[0]&&tc===enPassant[1]) board[tr-1][tc]=null;
-  if(piece==='bP'&&enPassant&&tr===enPassant[0]&&tc===enPassant[1]) board[tr+1][tc]=null;
-
-  // Compute new en passant
-  let newEP = null;
-  if(piece==='wP'&&fr===6&&tr===4) newEP=[5,tc];
-  if(piece==='bP'&&fr===1&&tr===3) newEP=[2,tc];
-
-  // Tick skill effects
-  const frozen = tickEffectMap(frozenPieces, tr+','+tc);
-  const shielded = tickEffectMap(shieldedPieces, tr+','+tc);
-  const cloned = tickEffectMap(clonedPieces, tr+','+tc);
-  // Remove clones that expire
-  for(const key in cloned){ if(cloned[key]<=0) board[parseInt(key)][parseInt(key.split(',')[1])]=null; }
-
-  // Captured tracking
-  let capW = [...(gameState.capturedWhite||[])];
-  let capB = [...(gameState.capturedBlack||[])];
-  if(target){
-    if(target[0]==='w') capW.push(target);
-    else capB.push(target);
-  }
-
-  // Tick cooldowns for current player
-  const nextTurn = myColor==='white'?'black':'white';
-
-  // Move notation
-  const files = 'abcdefgh';
-  const notation = files[fc]+(fr+1)+files[tc]+(tr+1);
-  const history = [...(gameState.moveHistory||[]), notation];
-
-  // Haste: second move?
-  if(hasteActive && !hasteUsed){
-    hasteUsed = true;
-    // Don't switch turn
-    pushFullUpdate(board, myColor, history, capW, capB, {fr,fc,tr,tc}, castleRights, newEP, {frozen,shielded,cloned}, false);
-    showStatus('急速！還可以再走一步', 'blue');
-    return;
-  }
-  hasteActive = false; hasteUsed = false;
-
-  // Check / checkmate detection
-  // 王炸: if nextTurn's king is gone, skip normal check/checkmate
-  const nextPre = nextTurn==='white'?'w':'b';
-  let kingExists = false;
-  for(let rr=0;rr<8;rr++) for(let cc2=0;cc2<8;cc2++) if(board[rr][cc2]===nextPre+'K') kingExists=true;
-
-  let inCheck=false, isCheckmate=false, isDraw=false;
-  if(kingExists && !(kingBombFor===nextTurn)){
-    const ev = evaluatePosition(board, nextTurn, castleRights, newEP);
-    inCheck=ev.inCheck; isCheckmate=ev.isCheckmate; isDraw=ev.isDraw;
-  }
-  // 王炸: also check if current player (kingBombFor) has no pieces left
-  const myPre2 = myColor==='white'?'w':'b';
-  if(kingBombFor===myColor){
-    let anyLeft2=false;
-    for(let rr=0;rr<8;rr++) for(let cc2=0;cc2<8;cc2++) if(board[rr][cc2]&&board[rr][cc2][0]===myPre2) anyLeft2=true;
-    if(!anyLeft2){ isCheckmate=true; } // all pieces gone = lose
-  }
-
-  let newStatus = 'playing';
-  let winner = null;
-  if(isCheckmate){
-    newStatus='checkmate';
-    // 王炸: if king was bombed for nextTurn, the one who lost all pieces loses
-    winner = (kingBombFor===myColor && !isInCheck(board,nextTurn)) ? nextTurn : myColor;
-  }
-  else if(isDraw){ newStatus='draw'; }
-
-  pushFullUpdate(board, nextTurn, history, capW, capB, {fr,fc,tr,tc}, castleRights, newEP, {frozen,shielded,cloned}, true, newStatus, winner, inCheck?nextTurn:null);
-
-  // Tick cooldowns
-  setTimeout(()=>tickSkillCooldowns(myColor), 100);
-}
-
-function pushFullUpdate(board, turn, history, capW, capB, lastMove, cr, ep, effects, switchTurn, status, winner, checkColor){
-  roomRef.update({
-    board, turn, moveHistory: history,
-    capturedWhite: capW, capturedBlack: capB,
-    lastMove: {fr:lastMove.fr,fc:lastMove.fc,tr:lastMove.tr,tc:lastMove.tc},
-    castleRights: cr, enPassant: ep,
-    skillEffects: { frozen:effects.frozen, shielded:effects.shielded, cloned:effects.cloned },
-    status: status||'playing',
-    winner: winner||null,
-    check: checkColor||null
-  });
-}
-
-function pushBoardUpdate(board, switchTurn) {
-  const update = { board };
-  if(switchTurn){ update.turn = gameState.turn==='white'?'black':'white'; }
-  roomRef.update(update);
-}
-
-function tickEffectMap(map, movedKey) {
-  const result = {};
-  for(const [k,v] of Object.entries(map||{})){
-    const remaining = k===movedKey ? v-1 : v-1;
-    if(remaining > 0) result[k] = remaining;
-  }
-  return result;
-}
-
-// ═══════════════════════════════════════════════
-//  LEGAL MOVES (Full Chess Rules)
-// ═══════════════════════════════════════════════
-function getLegalMoves(r, c, board) {
-  const raw = getRawMoves(r, c, board);
-  // Filter moves that leave king in check
-  return raw.filter(([tr,tc])=>{
-    const test = JSON.parse(JSON.stringify(board));
-    test[tr][tc] = test[r][c];
-    test[r][c] = null;
-    return !isInCheck(test, myColor);
-  });
-}
-
-function getRawMoves(r, c, board) {
-  const piece = board[r][c];
-  if(!piece) return [];
-  const color = piece[0]==='w'?'white':'black';
-  const type = piece[1];
-  const moves = [];
-  const myPre = color==='white'?'w':'b';
-  const theirPre = color==='white'?'b':'w';
-
-  const add = (tr,tc)=>{
-    if(tr>=0&&tr<8&&tc>=0&&tc<8){
-      const t=board[tr][tc];
-      if(!t||t[0]===theirPre) moves.push([tr,tc]);
-    }
-  };
-  const slide = (drs)=>{
-    for(const [dr,dc] of drs){
-      let nr=r+dr, nc=c+dc;
-      while(nr>=0&&nr<8&&nc>=0&&nc<8){
-        const t=board[nr][nc];
-        if(!t){ moves.push([nr,nc]); nr+=dr; nc+=dc; }
-        else { if(t[0]===theirPre) moves.push([nr,nc]); break; }
-      }
-    }
-  };
-
-  if(type==='R') slide([[1,0],[-1,0],[0,1],[0,-1]]);
-  else if(type==='B') slide([[1,1],[1,-1],[-1,1],[-1,-1]]);
-  else if(type==='Q'){
-    // 花瓶技能：限制為1格（同國王）
-    const isLimited = queenLimitedFor && queenLimitedFor===color;
-    if(isLimited){
-      [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]].forEach(([dr,dc])=>add(r+dr,c+dc));
-    } else {
-      slide([[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]]);
-    }
-  }
-  else if(type==='N'){
-    [[2,1],[2,-1],[-2,1],[-2,-1],[1,2],[1,-2],[-1,2],[-1,-2]].forEach(([dr,dc])=>add(r+dr,c+dc));
-  }
-  else if(type==='K'){
-    [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]].forEach(([dr,dc])=>add(r+dr,c+dc));
-    // Castling
-    const cr = gameState?.castleRights||{};
-    if(color==='white'&&r===7&&c===4&&cr.wK){
-      if(cr.wR_h&&!board[7][5]&&!board[7][6]&&board[7][7]==='wR') moves.push([7,6]);
-      if(cr.wR_a&&!board[7][3]&&!board[7][2]&&!board[7][1]&&board[7][0]==='wR') moves.push([7,2]);
-    }
-    if(color==='black'&&r===0&&c===4&&cr.bK){
-      if(cr.bR_h&&!board[0][5]&&!board[0][6]&&board[0][7]==='bR') moves.push([0,6]);
-      if(cr.bR_a&&!board[0][3]&&!board[0][2]&&!board[0][1]&&board[0][0]==='bR') moves.push([0,2]);
-    }
-  }
-  else if(type==='P'){
-    const dir = color==='white'?1:-1;
-    const start = color==='white'?6:1;
-    if(r+dir>=0&&r+dir<8&&!board[r+dir][c]) moves.push([r+dir,c]);
-    if(r===start&&!board[r+dir][c]&&!board[r+2*dir][c]) moves.push([r+2*dir,c]);
-    for(const dc of [-1,1]){
-      const nr=r+dir, nc=c+dc;
-      if(nr>=0&&nr<8&&nc>=0&&nc<8){
-        if(board[nr][nc]&&board[nr][nc][0]===theirPre) moves.push([nr,nc]);
-        // En passant
-        const ep = gameState?.enPassant;
-        if(ep&&nr===ep[0]&&nc===ep[1]) moves.push([nr,nc]);
-      }
-    }
-  }
-  return moves;
-}
-
-function isInCheck(board, color) {
-  const myPre = color==='white'?'w':'b';
-  let kr=-1, kc=-1;
-  for(let r=0;r<8;r++) for(let c=0;c<8;c++) if(board[r][c]===myPre+'K'){ kr=r; kc=c; }
-  if(kr<0) return false;
-  const opp = color==='white'?'black':'white';
-  for(let r=0;r<8;r++) for(let c=0;c<8;c++){
+function isSkillTgt(r,c){
+  if(!activeSkill||!gs?.board)return false;
+  const board=gs.board;
+  const mP=myColor==='white'?'w':'b';
+  const oP=myColor==='white'?'b':'w';
+  if(activeSkill==='rook_pierce'){
+    if(!sk2Src)return board[r][c]===mP+'R';
+    const[rr,rc]=sk2Src;
     const p=board[r][c];
-    if(p&&p[0]===(opp==='white'?'w':'b')){
-      const moves = getRawMovesSimple(r,c,board);
-      if(moves.some(([tr,tc])=>tr===kr&&tc===kc)) return true;
-    }
+    return p&&p[0]===oP&&p[1]!=='K'&&(r===rr||c===rc);
   }
   return false;
 }
-
-function getRawMovesSimple(r,c,board) {
-  const piece = board[r][c]; if(!piece) return [];
-  const color = piece[0]==='w'?'white':'black';
-  const type = piece[1];
-  const theirPre = color==='white'?'b':'w';
-  const moves = [];
-  const add=(tr,tc)=>{ if(tr>=0&&tr<8&&tc>=0&&tc<8){ const t=board[tr][tc]; if(!t||t[0]===theirPre) moves.push([tr,tc]); }};
-  const slide=(drs)=>{ for(const [dr,dc] of drs){ let nr=r+dr,nc=c+dc; while(nr>=0&&nr<8&&nc>=0&&nc<8){ const t=board[nr][nc]; if(!t){moves.push([nr,nc]);nr+=dr;nc+=dc;}else{if(t[0]===theirPre)moves.push([nr,nc]);break;} } }};
-  if(type==='R') slide([[1,0],[-1,0],[0,1],[0,-1]]);
-  else if(type==='B') slide([[1,1],[1,-1],[-1,1],[-1,-1]]);
-  else if(type==='Q') slide([[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]]);
-  else if(type==='N') [[2,1],[2,-1],[-2,1],[-2,-1],[1,2],[1,-2],[-1,2],[-1,-2]].forEach(([dr,dc])=>add(r+dr,c+dc));
-  else if(type==='K') [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]].forEach(([dr,dc])=>add(r+dr,c+dc));
-  else if(type==='P'){
-    const dir=color==='white'?1:-1;
-    for(const dc of [-1,1]){ const nr=r+dir,nc=c+dc; if(nr>=0&&nr<8&&nc>=0&&nc<8) moves.push([nr,nc]); }
+function handleSkillTgt(r,c){
+  const board=gs.board;
+  const mP=myColor==='white'?'w':'b';
+  const oP=myColor==='white'?'b':'w';
+  if(activeSkill==='rook_pierce'){
+    if(!sk2Src){
+      if(board[r][c]!==mP+'R')return toast('請選己方城堡');
+      sk2Src=[r,c];renderBoard();
+      toast('選擇要吃掉的敵方棋子（同行或同列，不能吃王）','blue');return;
+    }
+    const[rr,rc]=sk2Src;
+    const p=board[r][c];
+    if(!p||p[0]!==oP||p[1]==='K')return toast('無效目標');
+    if(r!==rr&&c!==rc)return toast('必須在同行或同列');
+    const nb=JSON.parse(JSON.stringify(board));
+    const eaten=nb[r][c];nb[r][c]=null;
+    const sf=JSON.parse(JSON.stringify(gs.sf||{}));
+    sf.rpl=sf.rpl||{white:0,black:0};
+    sf.rpl[myColor]=Math.max(0,(sf.rpl[myColor]||0)-1);
+    roomRef.update({board:nb,sf});
+    sysChat('🚂 '+myName+'的城堡穿透吃掉了 '+GLYPH[eaten]+'！');
   }
-  return moves;
+  activeSkill=null;sk2Src=null;renderBoard();
 }
 
-function evaluatePosition(board, color, castleRights, enPassant) {
-  const fakeGs = { castleRights, enPassant };
-  const inCheck = isInCheck(board, color);
-  // Check if any legal move exists
-  let hasMove = false;
-  for(let r=0;r<8&&!hasMove;r++) for(let c=0;c<8&&!hasMove;c++){
+// ════════════════════════════
+// MOVE EXECUTION
+// ════════════════════════════
+function doMove(fr,fc,tr,tc){
+  const p=gs.board[fr][fc];
+  const isPromo=(p==='wP'&&tr===7)||(p==='bP'&&tr===0);
+  if(isPromo){pendingPromo={fr,fc,tr,tc};openPromo(p[0]);selSq=null;legalMvs=[];return;}
+  execMove(fr,fc,tr,tc,null);
+}
+function execMove(fr,fc,tr,tc,promoTo){
+  const board=JSON.parse(JSON.stringify(gs.board));
+  const p=board[fr][fc];const tgt=board[tr][tc];
+  const cr=JSON.parse(JSON.stringify(gs.cr||{wK:1,wRh:1,wRa:1,bK:1,bRh:1,bRa:1}));
+  const mP=myColor==='white'?'w':'b';
+  const frozen=JSON.parse(JSON.stringify(gs.sfx?.frozen||{}));
+
+  board[tr][tc]=promoTo?(mP+promoTo):p;
+  board[fr][fc]=null;
+
+  // Castling rook
+  if(p==='wK'){cr.wK=0;if(fc===4&&tc===6){board[7][5]=board[7][7];board[7][7]=null;}if(fc===4&&tc===2){board[7][3]=board[7][0];board[7][0]=null;}}
+  if(p==='bK'){cr.bK=0;if(fc===4&&tc===6){board[0][5]=board[0][7];board[0][7]=null;}if(fc===4&&tc===2){board[0][3]=board[0][0];board[0][0]=null;}}
+  if(p==='wR'){if(fc===7)cr.wRh=0;if(fc===0)cr.wRa=0;}
+  if(p==='bR'){if(fc===7)cr.bRh=0;if(fc===0)cr.bRa=0;}
+
+  // En passant
+  const ep=gs.ep;
+  if(p==='wP'&&ep&&tr===ep[0]&&tc===ep[1])board[tr-1][tc]=null;
+  if(p==='bP'&&ep&&tr===ep[0]&&tc===ep[1])board[tr+1][tc]=null;
+  let newEP=null;
+  if(p==='wP'&&fr===6&&tr===4)newEP=[5,tc];
+  if(p==='bP'&&fr===1&&tr===3)newEP=[2,tc];
+
+  // Tick frozen
+  const newFrozen=tickMap(frozen);
+
+  // Captured
+  const capW=[...(gs.capW||[])],capB=[...(gs.capB||[])];
+  if(tgt){if(tgt[0]==='w')capW.push(tgt);else capB.push(tgt);}
+
+  const nextTurn=myColor==='white'?'black':'white';
+  const f='abcdefgh';
+  const hist=[...(gs.hist||[]),f[fc]+(fr+1)+f[tc]+(tr+1)+(promoTo||'')];
+
+  // Check / checkmate
+  const nP=nextTurn==='white'?'w':'b';
+  let hasKing=false;
+  for(let r=0;r<8;r++)for(let c=0;c<8;c++)if(board[r][c]===nP+'K')hasKing=true;
+  let inChk=false,isMate=false,isDraw=false;
+  if(hasKing&&kingBombFor!==nextTurn){
+    const ev=evalPos(board,nextTurn,cr,newEP);
+    inChk=ev.c;isMate=ev.m;isDraw=ev.d;
+  }
+
+  let status='playing',winner=null;
+  if(isMate){status='checkmate';winner=myColor;}
+  else if(isDraw){status='draw';}
+
+  roomRef.update({
+    board,turn:nextTurn,hist,capW,capB,
+    sfx:{frozen:newFrozen},
+    lastMove:{fr,fc,tr,tc},cr,ep:newEP,
+    status,winner,check:inChk?nextTurn:null
+  });
+  selSq=null;legalMvs=[];
+}
+
+function tickMap(m){
+  const r={};
+  for(const[k,v]of Object.entries(m))if(v-1>0)r[k]=v-1;
+  return r;
+}
+
+// ════════════════════════════
+// LEGAL MOVES
+// ════════════════════════════
+function getLegal(r,c,board){
+  return getRaw(r,c,board).filter(([tr,tc])=>{
+    const t=JSON.parse(JSON.stringify(board));
+    t[tr][tc]=t[r][c];t[r][c]=null;
+    if(kingBombFor===myColor)return true;// 王炸: no king to protect
+    return !inChk(t,myColor);
+  });
+}
+function getRaw(r,c,board,fgs){
+  const _gs=fgs||gs;
+  const p=board[r][c];if(!p)return[];
+  const col=p[0]==='w'?'white':'black';
+  const t=p[1];const oP=p[0]==='w'?'b':'w';
+  const mvs=[];
+  const add=(tr,tc)=>{if(tr>=0&&tr<8&&tc>=0&&tc<8){const x=board[tr][tc];if(!x||x[0]===oP)mvs.push([tr,tc]);}};
+  const slide=ds=>{for(const[dr,dc]of ds){let nr=r+dr,nc=c+dc;while(nr>=0&&nr<8&&nc>=0&&nc<8){const x=board[nr][nc];if(!x){mvs.push([nr,nc]);nr+=dr;nc+=dc;}else{if(x[0]===oP)mvs.push([nr,nc]);break;}}}};
+  if(t==='R')slide([[1,0],[-1,0],[0,1],[0,-1]]);
+  else if(t==='B')slide([[1,1],[1,-1],[-1,1],[-1,-1]]);
+  else if(t==='Q'){
+    const lim=queenLimFor&&queenLimFor===col;
+    if(lim)[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]].forEach(([dr,dc])=>add(r+dr,c+dc));
+    else slide([[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]]);
+  }
+  else if(t==='N')[[2,1],[2,-1],[-2,1],[-2,-1],[1,2],[1,-2],[-1,2],[-1,-2]].forEach(([dr,dc])=>add(r+dr,c+dc));
+  else if(t==='K'){
+    [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]].forEach(([dr,dc])=>add(r+dr,c+dc));
+    const cr=_gs?.cr||{};
+    if(col==='white'&&r===7&&c===4&&cr.wK){if(cr.wRh&&!board[7][5]&&!board[7][6]&&board[7][7]==='wR')mvs.push([7,6]);if(cr.wRa&&!board[7][3]&&!board[7][2]&&!board[7][1]&&board[7][0]==='wR')mvs.push([7,2]);}
+    if(col==='black'&&r===0&&c===4&&cr.bK){if(cr.bRh&&!board[0][5]&&!board[0][6]&&board[0][7]==='bR')mvs.push([0,6]);if(cr.bRa&&!board[0][3]&&!board[0][2]&&!board[0][1]&&board[0][0]==='bR')mvs.push([0,2]);}
+  }
+  else if(t==='P'){
+    const d=col==='white'?1:-1;const st=col==='white'?6:1;
+    if(r+d>=0&&r+d<8&&!board[r+d][c])mvs.push([r+d,c]);
+    if(r===st&&!board[r+d][c]&&!board[r+2*d][c])mvs.push([r+2*d,c]);
+    for(const dc of[-1,1]){const nr=r+d,nc=c+dc;if(nr>=0&&nr<8&&nc>=0&&nc<8){if(board[nr][nc]&&board[nr][nc][0]===oP)mvs.push([nr,nc]);const ep=_gs?.ep;if(ep&&nr===ep[0]&&nc===ep[1])mvs.push([nr,nc]);}}
+  }
+  return mvs;
+}
+function inChk(board,color){
+  const mP=color==='white'?'w':'b';
+  let kr=-1,kc=-1;
+  for(let r=0;r<8;r++)for(let c=0;c<8;c++)if(board[r][c]===mP+'K'){kr=r;kc=c;}
+  if(kr<0)return false;
+  const oP=color==='white'?'b':'w';
+  for(let r=0;r<8;r++)for(let c=0;c<8;c++){
     const p=board[r][c];
-    if(p&&p[0]===(color==='white'?'w':'b')){
-      const rawMs = getRawMoves(r,c,board);
-      for(const [tr,tc] of rawMs){
-        const test=JSON.parse(JSON.stringify(board));
-        test[tr][tc]=test[r][c]; test[r][c]=null;
-        if(!isInCheck(test,color)){ hasMove=true; break; }
+    if(p&&p[0]===oP){if(getRawSimple(r,c,board).some(([tr,tc])=>tr===kr&&tc===kc))return true;}
+  }
+  return false;
+}
+function getRawSimple(r,c,board){
+  const p=board[r][c];if(!p)return[];
+  const col=p[0]==='w'?'white':'black';const t=p[1];const oP=p[0]==='w'?'b':'w';
+  const mvs=[];
+  const add=(tr,tc)=>{if(tr>=0&&tr<8&&tc>=0&&tc<8){const x=board[tr][tc];if(!x||x[0]===oP)mvs.push([tr,tc]);}};
+  const slide=ds=>{for(const[dr,dc]of ds){let nr=r+dr,nc=c+dc;while(nr>=0&&nr<8&&nc>=0&&nc<8){const x=board[nr][nc];if(!x){mvs.push([nr,nc]);nr+=dr;nc+=dc;}else{if(x[0]===oP)mvs.push([nr,nc]);break;}}}};
+  if(t==='R')slide([[1,0],[-1,0],[0,1],[0,-1]]);
+  else if(t==='B')slide([[1,1],[1,-1],[-1,1],[-1,-1]]);
+  else if(t==='Q')slide([[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]]);
+  else if(t==='N')[[2,1],[2,-1],[-2,1],[-2,-1],[1,2],[1,-2],[-1,2],[-1,-2]].forEach(([dr,dc])=>add(r+dr,c+dc));
+  else if(t==='K')[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]].forEach(([dr,dc])=>add(r+dr,c+dc));
+  else if(t==='P'){const d=col==='white'?1:-1;for(const dc of[-1,1]){const nr=r+d,nc=c+dc;if(nr>=0&&nr<8&&nc>=0&&nc<8)mvs.push([nr,nc]);}}
+  return mvs;
+}
+function evalPos(board,color,cr,ep){
+  const ck=inChk(board,color);
+  let hasMove=false;
+  const fgs={cr,ep};
+  const mP=color==='white'?'w':'b';
+  for(let r=0;r<8&&!hasMove;r++)for(let c=0;c<8&&!hasMove;c++){
+    const p=board[r][c];
+    if(p&&p[0]===mP){
+      for(const[tr,tc]of getRaw(r,c,board,fgs)){
+        const t=JSON.parse(JSON.stringify(board));t[tr][tc]=t[r][c];t[r][c]=null;
+        if(!inChk(t,color)){hasMove=true;break;}
       }
     }
   }
-  return {
-    inCheck,
-    isCheckmate: inCheck && !hasMove,
-    isDraw: !inCheck && !hasMove
-  };
+  return{c:ck,m:ck&&!hasMove,d:!ck&&!hasMove};
 }
 
-// ═══════════════════════════════════════════════
-//  PAWN PROMOTION
-// ═══════════════════════════════════════════════
-function openPromoModal(colorChar) {
-  const pieces = colorChar==='w'
-    ? [{t:'Q',s:'♕'},{t:'R',s:'♖'},{t:'B',s:'♗'},{t:'N',s:'♘'}]
-    : [{t:'Q',s:'♛'},{t:'R',s:'♜'},{t:'B',s:'♝'},{t:'N',s:'♞'}];
-  const cont = document.getElementById('promo-pieces');
-  cont.innerHTML = '';
-  pieces.forEach(p=>{
-    const btn = document.createElement('button');
-    btn.className = 'promo-piece-btn';
-    btn.textContent = p.s;
-    btn.onclick = ()=>{
-      document.getElementById('promo-modal').classList.remove('open');
-      const {from,to,board,target} = pendingPromotion;
-      pendingPromotion = null;
-      const cr = {...(gameState.castleRights||{})};
-      applyMoveToBoard(board, from[0], from[1], to[0], to[1], p.t, cr);
+// ════════════════════════════
+// PAWN PROMOTION
+// ════════════════════════════
+function openPromo(cc){
+  const ps=cc==='w'
+    ?[{t:'Q',g:'♕'},{t:'R',g:'♖'},{t:'B',g:'♗'},{t:'N',g:'♘'}]
+    :[{t:'Q',g:'♛'},{t:'R',g:'♜'},{t:'B',g:'♝'},{t:'N',g:'♞'}];
+  const row=document.getElementById('prow');row.innerHTML='';
+  ps.forEach(p=>{
+    const btn=document.createElement('button');btn.className='pbtn';btn.textContent=p.g;
+    btn.onclick=()=>{
+      document.getElementById('promo-ov').classList.remove('on');
+      const{fr,fc,tr,tc}=pendingPromo;pendingPromo=null;
+      execMove(fr,fc,tr,tc,p.t);
     };
-    cont.appendChild(btn);
+    row.appendChild(btn);
   });
-  document.getElementById('promo-modal').classList.add('open');
+  document.getElementById('promo-ov').classList.add('on');
 }
 
-// ═══════════════════════════════════════════════
-//  ERROR 404 (我不玩了)
-// ═══════════════════════════════════════════════
-function triggerError404() {
-  error404Active = true;
-  const overlay = document.getElementById('error404-overlay');
-  const countdown = document.getElementById('error404-countdown');
-  overlay.classList.add('show');
-  let t = 10;
-  countdown.textContent = `伺服器將在 ${t} 秒後修復...`;
-  const timer = setInterval(()=>{
-    t--;
-    countdown.textContent = t>0 ? `伺服器將在 ${t} 秒後修復...` : '正在修復中...';
-    if(t<=0){
-      clearInterval(timer);
-      overlay.classList.remove('show');
-      // Show fixed message
-      setTimeout(()=>{
-        const fixedOverlay = document.getElementById('server-fixed-overlay');
-        const fixedText = document.getElementById('server-fixed-text');
-        fixedText.textContent = '伺服器已修復，此局平局';
-        fixedOverlay.classList.add('show');
-        setTimeout(()=>{
-          fixedOverlay.classList.remove('show');
-          error404Active = false;
-          // Force rematch / reset board
-          if(myColor==='white') {
-            const board = initialBoard();
-            const sf = gameState?.specialFlags || {};
-            // re-apply start passives on new board
-            roomRef.update({
-              board, turn:'white', status:'draw',
-              moveHistory:[], capturedWhite:[], capturedBlack:[],
-              skillEffects:{frozen:{},shielded:{},cloned:{}},
-              lastMove:null, check:null, winner:null,
-              castleRights:{wK:true,wR_h:true,wR_a:true,bK:true,bR_h:true,bR_a:true},
-              enPassant:null
-            });
-          }
-          setTimeout(()=>{
-            // Auto rematch
-            if(myColor==='white') {
-              setTimeout(()=>rematch(), 500);
-            }
-          }, 500);
-        }, 3000);
-      }, 200);
-    }
-  }, 1000);
-}
-
-// ═══════════════════════════════════════════════
-//  GAME OVER
-// ═══════════════════════════════════════════════
-function openGameOver(winner) {
-  const m = document.getElementById('gameover-modal');
-  if(m.classList.contains('open')) return;
-  const titleEl = document.getElementById('gameover-title');
-  const subEl = document.getElementById('gameover-sub');
+// ════════════════════════════
+// GAME OVER
+// ════════════════════════════
+function openGameOver(winner){
+  const ov=document.getElementById('go-ov');
+  if(ov.classList.contains('on'))return;
+  const t=document.getElementById('go-t'),s=document.getElementById('go-s');
   if(winner){
-    const winnerName = gameState[winner]?.name || winner;
-    titleEl.textContent = winner===myColor?'🏆 你贏了！':'😢 你輸了';
-    subEl.textContent = winnerName + ' 獲得勝利！';
-  } else {
-    titleEl.textContent = '🤝 和棋';
-    subEl.textContent = '雙方無法繼續，和棋收場';
-  }
-  m.classList.add('open');
+    const wn=gs[winner]?.name||winner;
+    t.textContent=winner===myColor?'🏆 你贏了！':'😢 你輸了';
+    s.textContent=wn+' 獲得勝利！';
+  } else{t.textContent='🤝 和棋';s.textContent='雙方無法繼續，和棋收場';}
+  ov.classList.add('on');
 }
-
-function rematch() {
-  document.getElementById('gameover-modal').classList.remove('open');
-  error404Active = false;
-  // Reset skill cooldowns
-  const wSk = (gameState?.white?.skills||[]).map(s=>({...s,cooldown:0}));
-  const bSk = (gameState?.black?.skills||[]).map(s=>({...s,cooldown:0}));
-  if(myColor==='white') {
-    roomRef.update({ 'white/skills': wSk });
-    roomRef.update({ 'black/skills': bSk });
-  }
-  if(myColor==='white') {
-    // Re-run startGame logic (which re-applies passives)
-    const savedWhite = {...(gameState.white||{}), skills: wSk, ready: true};
-    const savedBlack = {...(gameState.black||{}), skills: bSk, ready: true};
-    roomRef.update({ white: savedWhite, black: savedBlack, board: null });
-    setTimeout(()=>startGame(), 200);
-  }
-  addSystemChat('♟ 新一局開始！');
-}
-
-function leaveGame() {
-  if(roomRef) roomRef.off();
-  document.getElementById('game').classList.remove('active');
-  document.getElementById('lobby').classList.add('active');
-  document.getElementById('gameover-modal').classList.remove('open');
-  myColor = null; roomId = ''; roomRef = null; gameState = null;
-  selectedSq = null; legalMoves = []; activeSkill = null;
-  queenLimitedFor=null; kingBombFor=null; kingWalkWinFor=null; dontPlayFor=null;
-  rookPierceLeft={white:0,black:0}; error404Active=false;
-  document.getElementById('chat-messages').innerHTML = '';
-  document.getElementById('move-list').innerHTML = '';
-}
-
-// ═══════════════════════════════════════════════
-//  CHAT
-// ═══════════════════════════════════════════════
-function sendChat() {
-  const input = document.getElementById('chat-input');
-  const msg = input.value.trim();
-  if(!msg) return;
-  input.value = '';
-  const ref = db.ref('rooms/'+roomId+'/chat').push();
-  ref.set({ sender: myName, color: myColor, text: msg, ts: Date.now() });
-}
-
-function addSystemChat(text) {
-  const ref = db.ref('rooms/'+roomId+'/chat').push();
-  ref.set({ sender:'系統', color:'system', text, ts: Date.now() });
-}
-
-function renderChatMsg(data) {
-  const cont = document.getElementById('chat-messages');
-  const el = document.createElement('div');
-  if(data.color==='system'){
-    el.className = 'chat-msg system';
-    el.textContent = data.text;
-  } else {
-    el.className = 'chat-msg ' + (data.color===myColor?'mine':'theirs');
-    el.innerHTML = `<div class="chat-sender">${data.sender}</div>${escapeHtml(data.text)}`;
-  }
-  cont.appendChild(el);
-  cont.scrollTop = cont.scrollHeight;
-}
-
-function escapeHtml(t){ return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-
-// ═══════════════════════════════════════════════
-//  CAPTURED & HISTORY
-// ═══════════════════════════════════════════════
-function renderCaptured(capW, capB) {
-  const top = document.getElementById('captured-top');
-  const bot = document.getElementById('captured-bottom');
+function rematch(){
+  document.getElementById('go-ov').classList.remove('on');
+  e404Active=false;
   if(myColor==='white'){
-    top.innerHTML = capB.map(p=>PIECES[p]||'').join('');
-    bot.innerHTML = capW.map(p=>PIECES[p]||'').join('');
-  } else {
-    top.innerHTML = capW.map(p=>PIECES[p]||'').join('');
-    bot.innerHTML = capB.map(p=>PIECES[p]||'').join('');
+    roomRef.update({white:{...gs.white,ready:true},black:{...gs.black,ready:true},board:null,status:'waiting'});
+    setTimeout(()=>startGame(),300);
   }
+  sysChat('♟ 新一局開始！');
+}
+function leaveGame(){
+  if(roomRef)roomRef.off();
+  document.getElementById('game').classList.remove('on');
+  document.getElementById('lobby').classList.add('on');
+  ['go-ov','sk-ov','promo-ov'].forEach(id=>document.getElementById(id).classList.remove('on'));
+  document.getElementById('e404').classList.remove('on');
+  document.getElementById('fxmsg').classList.remove('on');
+  myColor=null;roomId='';roomRef=null;gs=null;
+  selSq=null;legalMvs=[];activeSkill=null;sk2Src=null;
+  queenLimFor=null;kingBombFor=null;kingWalkFor=null;dontPlayFor=null;
+  rookPierceLeft={white:0,black:0};e404Active=false;
+  document.getElementById('cmsgs').innerHTML='';
+  document.getElementById('cmsgsm').innerHTML='';
+  document.getElementById('mlist').innerHTML='';
+  renderBoard();
 }
 
-function renderMoveHistory(history) {
-  const el = document.getElementById('move-list');
-  let html = '';
-  for(let i=0;i<history.length;i+=2){
-    const n = Math.floor(i/2)+1;
-    html += `<span>${n}.</span> <span class="move-w">${history[i]||''}</span> <span class="move-b">${history[i+1]||''}</span><br>`;
+// ════════════════════════════
+// ERROR 404 (我不玩了)
+// ════════════════════════════
+function triggerE404(){
+  e404Active=true;
+  const ov=document.getElementById('e404');
+  const cd=document.getElementById('e4c');
+  ov.classList.add('on');
+  let t=10;cd.textContent='伺服器將在 '+t+' 秒後修復...';
+  const tmr=setInterval(()=>{
+    t--;cd.textContent=t>0?'伺服器將在 '+t+' 秒後修復...':'正在修復中...';
+    if(t<=0){
+      clearInterval(tmr);ov.classList.remove('on');
+      setTimeout(()=>{
+        const fx=document.getElementById('fxmsg');
+        document.getElementById('fxt').textContent='伺服器已修復\n此局平局';
+        fx.classList.add('on');
+        setTimeout(()=>{
+          fx.classList.remove('on');e404Active=false;
+          if(myColor==='white')setTimeout(()=>rematch(),400);
+        },3000);
+      },200);
+    }
+  },1000);
+}
+
+// ════════════════════════════
+// CHAT
+// ════════════════════════════
+function sendChat(src){
+  const inp=document.getElementById(src==='m'?'cin-m':'cin-d');
+  const msg=inp.value.trim();if(!msg)return;inp.value='';
+  db.ref('rooms/'+roomId+'/chat').push({sender:myName,color:myColor,text:msg,ts:Date.now()});
+}
+function sysChat(text){
+  if(!roomId)return;
+  db.ref('rooms/'+roomId+'/chat').push({sender:'系統',color:'sys',text,ts:Date.now()});
+}
+function renderChatMsg(d){
+  const mk=()=>{
+    const el=document.createElement('div');
+    if(d.color==='sys'){el.className='msg sys';el.textContent=d.text;}
+    else{el.className='msg '+(d.color===myColor?'mine':'theirs');el.innerHTML='<div class="msg-s">'+esc(d.sender)+'</div>'+esc(d.text);}
+    return el;
+  };
+  ['cmsgs','cmsgsm'].forEach(id=>{
+    const c=document.getElementById(id);
+    if(c){c.appendChild(mk());c.scrollTop=c.scrollHeight;}
+  });
+}
+function esc(t){return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+// ════════════════════════════
+// RENDER HELPERS
+// ════════════════════════════
+function renderCaptured(){
+  if(!gs)return;
+  const capW=(gs.capW||[]).map(p=>GLYPH[p]).join('');
+  const capB=(gs.capB||[]).map(p=>GLYPH[p]).join('');
+  const top=document.getElementById('cap-t'),bot=document.getElementById('cap-b');
+  if(myColor==='white'){top.textContent=capB;bot.textContent=capW;}
+  else{top.textContent=capW;bot.textContent=capB;}
+}
+function renderHistory(){
+  if(!gs)return;
+  const el=document.getElementById('mlist');
+  const h=gs.hist||[];let html='';
+  for(let i=0;i<h.length;i+=2){
+    const n=Math.floor(i/2)+1;
+    html+=`<span style="color:var(--dim)">${n}.</span> <span class="mw">${h[i]||''}</span> ${h[i+1]||''}<br>`;
   }
-  el.innerHTML = html;
-  el.scrollTop = el.scrollHeight;
+  el.innerHTML=html;el.scrollTop=el.scrollHeight;
 }
 
-// ═══════════════════════════════════════════════
-//  HELPERS
-// ═══════════════════════════════════════════════
-function getAllSquares() { return document.querySelectorAll('.sq'); }
-function getSquareEl(r,c) { return document.querySelector(`.sq[data-r="${r}"][data-c="${c}"]`); }
-function clearHighlights() {
-  getAllSquares().forEach(sq=>sq.classList.remove('highlight','selected','skill-target'));
-  selectedSq = null; legalMoves = [];
-  if(gameState?.board) renderBoard(gameState.board, gameState.lastMove, gameState.check);
+function toggleDrawer(){document.getElementById('drawer').classList.toggle('open');}
+
+// ════════════════════════════
+// TOAST
+// ════════════════════════════
+let ttmr=null;
+function toast(msg,type=''){
+  const el=document.getElementById('toast');
+  el.textContent=msg;el.className='on'+(type?' '+type:'');
+  if(ttmr)clearTimeout(ttmr);
+  ttmr=setTimeout(()=>el.className='',3000);
 }
 
-let statusTimer = null;
-function showStatus(msg, type='') {
-  const el = document.getElementById('status-bar');
-  el.textContent = msg;
-  el.className = 'status-bar show' + (type?' '+type:'');
-  if(statusTimer) clearTimeout(statusTimer);
-  statusTimer = setTimeout(()=>el.classList.remove('show'), 3000);
-}
-
-// ═══════════════════════════════════════════════
-//  INIT BOARD
-// ═══════════════════════════════════════════════
-renderBoard(initialBoard(), null, null);
+// ════════════════════════════
+// INIT
+// ════════════════════════════
+renderBoard();
 </script>
 </body>
 </html>
