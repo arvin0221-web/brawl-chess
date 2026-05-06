@@ -57,29 +57,28 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 
 /* THE BOARD */
 #board{
-  /* Only columns — rows are determined by sq height */
   display:grid;
   grid-template-columns:repeat(8,1fr);
-  /* No grid-template-rows — let sq height drive row height */
+  /* NO grid-template-rows — row height comes from sq padding trick */
   border:2px solid #555;
   flex-shrink:0;
   user-select:none;
   touch-action:none;
-  width:320px;   /* overwritten by JS */
-  height:320px;  /* overwritten by JS */
+  /* JS sets width; height is auto because rows grow from sq */
+  width:320px;
+  height:auto;
 }
 .sq{
-  /* CRITICAL: sq must be a perfect square using padding-top trick */
+  /* padding-top:100% makes height = width → perfect square cell */
   position:relative;
+  padding-top:100%;   /* 100% of the column width = square */
   cursor:pointer;
   overflow:hidden;
-  /* width is set by grid column (1/8 of board width) */
-  /* height = width via padding-top: 100% */
-  padding-top:0;  /* overwritten by JS after setBoardSize */
 }
 .sq-inner{
+  /* Absolutely fill the sq, centre content */
   position:absolute;
-  inset:0;
+  top:0;left:0;right:0;bottom:0;
   display:flex;
   align-items:center;
   justify-content:center;
@@ -1085,32 +1084,30 @@ function setBoardSize(){
 
   const isDesktop = window.innerWidth >= 600;
 
-  // Available width
+  // Available width (board-area minus side panel and padding)
   const sideW  = isDesktop ? 192 : 0;
-  const hPad   = 12;
+  const hPad   = isDesktop ? 20 : 10;
   const availW = window.innerWidth - sideW - hPad;
 
-  // Available height
+  // Available height (viewport minus topbar, botbar, captured rows, padding)
   const topbarH = document.querySelector('.topbar')?.offsetHeight || 44;
   const botbarH = isDesktop ? 0 : (document.querySelector('.botbar')?.offsetHeight || 56);
-  const capH    = 46;   // two captured rows
-  const vPad    = 12;
+  const capH    = 50;
+  const vPad    = 16;
   const availH  = window.innerHeight - topbarH - botbarH - capH - vPad;
 
-  // Perfect square
+  // Board side = smallest of available width / height
   const size = Math.floor(Math.min(availW, availH));
+
+  // Only set WIDTH — height is auto (driven by padding-top:100% on .sq)
+  board.style.width    = size + 'px';
+  board.style.height   = 'auto';
+
+  // Piece font ≈ 76% of one cell
   const cellPx = Math.floor(size / 8);
-
-  board.style.width  = size + 'px';
-  board.style.height = size + 'px';
-
-  // Piece font size
   board.style.fontSize = Math.floor(cellPx * 0.76) + 'px';
 
-  // Set each sq to explicit pixel height so rows don't collapse
-  document.querySelectorAll('#board .sq').forEach(sq => {
-    sq.style.height = cellPx + 'px';
-  });
+  // DO NOT set sq height — let padding-top:100% handle it
 }
 
 // Re-size on window resize and orientation change
