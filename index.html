@@ -55,26 +55,34 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 .board-area{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:6px;overflow:hidden;min-width:0;min-height:0;}
 .captured{display:flex;flex-wrap:wrap;gap:1px;min-height:20px;font-size:clamp(11px,2.2vw,16px);opacity:.72;padding:1px 0;flex-shrink:0;}
 
-/* THE BOARD — JS sets exact px size via setBoardSize() */
+/* THE BOARD */
 #board{
+  /* Only columns — rows are determined by sq height */
   display:grid;
   grid-template-columns:repeat(8,1fr);
-  grid-template-rows:repeat(8,1fr);
-  /* px size is set by JS — see setBoardSize() */
+  /* No grid-template-rows — let sq height drive row height */
   border:2px solid #555;
   flex-shrink:0;
   user-select:none;
   touch-action:none;
-  /* Fallback */
-  width:320px;
-  height:320px;
+  width:320px;   /* overwritten by JS */
+  height:320px;  /* overwritten by JS */
 }
 .sq{
-  /* Each cell must be exactly 1/8 of the board — no min-height, no padding tricks */
+  /* CRITICAL: sq must be a perfect square using padding-top trick */
   position:relative;
-  display:flex;align-items:center;justify-content:center;
-  cursor:pointer;overflow:hidden;
-  /* width & height come from the grid — no extra sizing needed */
+  cursor:pointer;
+  overflow:hidden;
+  /* width is set by grid column (1/8 of board width) */
+  /* height = width via padding-top: 100% */
+  padding-top:0;  /* overwritten by JS after setBoardSize */
+}
+.sq-inner{
+  position:absolute;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
 }
 .sq.l{background:var(--sq-l);}
 .sq.d{background:var(--sq-d);}
@@ -584,25 +592,17 @@ function syncUI(){
 function renderBoard(){
   const el=document.getElementById('board');
   el.innerHTML='';
-  setBoardSize();
   if(!gs?.board)return;
   const board=gs.board;
   const flip=myColor==='black';
   const rows=flip?[0,1,2,3,4,5,6,7]:[7,6,5,4,3,2,1,0];
   const cols=flip?[7,6,5,4,3,2,1,0]:[0,1,2,3,4,5,6,7];
 
-  // Size is set by setBoardSize() — call after DOM settles
-  requestAnimationFrame(()=>setBoardSize());
-
   rows.forEach((r,ri)=>{
     cols.forEach((c,ci)=>{
       const sq=document.createElement('div');
       sq.className='sq '+((r+c)%2===0?'l':'d');
       sq.dataset.r=r;sq.dataset.c=c;
-
-      // Coord labels
-      if(ri===7){const f=document.createElement('span');f.className='cfile';f.textContent='abcdefgh'[c];sq.appendChild(f);}
-      if(ci===0){const rk=document.createElement('span');rk.className='crank';rk.textContent=r+1;sq.appendChild(rk);}
 
       // State highlights
       const lm=gs.lastMove;
@@ -611,6 +611,14 @@ function renderBoard(){
       if(legalMvs.some(m=>m[0]===r&&m[1]===c))sq.classList.add('hi');
       if(gs.check){const ck=gs.check==='white'?'wK':'bK';if(board[r][c]===ck)sq.classList.add('chk');}
       if(activeSkill&&isSkillTgt(r,c))sq.classList.add('sk-t');
+
+      // Inner wrapper (holds coord labels + piece, absolutely positioned)
+      const inner=document.createElement('div');
+      inner.className='sq-inner';
+
+      // Coord labels
+      if(ri===7){const f=document.createElement('span');f.className='cfile';f.textContent='abcdefgh'[c];inner.appendChild(f);}
+      if(ci===0){const rk=document.createElement('span');rk.className='crank';rk.textContent=r+1;inner.appendChild(rk);}
 
       // Piece
       const p=board[r][c];
@@ -621,8 +629,10 @@ function renderBoard(){
         if(frozenPcs[r+','+c])pc.classList.add('frozen');
         if(p[1]==='Q'&&queenLimFor&&queenLimFor===(p[0]==='w'?'white':'black'))pc.classList.add('limited');
         pc.addEventListener('pointerdown',e=>ptrDown(e,r,c,p));
-        sq.appendChild(pc);
+        inner.appendChild(pc);
       }
+
+      sq.appendChild(inner);
       sq.addEventListener('click',()=>handleClick(r,c));
       sq.addEventListener('dragover',e=>{e.preventDefault();sq.classList.add('dov');});
       sq.addEventListener('dragleave',()=>sq.classList.remove('dov'));
@@ -630,6 +640,8 @@ function renderBoard(){
       el.appendChild(sq);
     });
   });
+  // Now all 64 cells exist — set their heights
+  setBoardSize();
 }
 
 // ════════════════════════════
@@ -1073,27 +1085,32 @@ function setBoardSize(){
 
   const isDesktop = window.innerWidth >= 600;
 
-  // Available width: full viewport minus side panel (desktop) or padding (mobile)
-  const sideW = isDesktop ? 192 : 0;         // side panel width
-  const hPad  = isDesktop ? 16 : 10;         // horizontal padding in board-area
+  // Available width
+  const sideW  = isDesktop ? 192 : 0;
+  const hPad   = 12;
   const availW = window.innerWidth - sideW - hPad;
 
-  // Available height: full viewport minus topbar and (mobile) botbar
+  // Available height
   const topbarH = document.querySelector('.topbar')?.offsetHeight || 44;
-  const botbarH = isDesktop ? 0 : (document.querySelector('.botbar')?.offsetHeight || 58);
-  const capH    = 22 * 2 + 4;               // two captured rows
+  const botbarH = isDesktop ? 0 : (document.querySelector('.botbar')?.offsetHeight || 56);
+  const capH    = 46;   // two captured rows
   const vPad    = 12;
   const availH  = window.innerHeight - topbarH - botbarH - capH - vPad;
 
-  // Board must be a perfect square fitting both constraints
+  // Perfect square
   const size = Math.floor(Math.min(availW, availH));
+  const cellPx = Math.floor(size / 8);
 
   board.style.width  = size + 'px';
   board.style.height = size + 'px';
 
-  // Piece font size = 75% of one cell
-  const cell = Math.floor(size / 8);
-  board.style.fontSize = Math.floor(cell * 0.78) + 'px';
+  // Piece font size
+  board.style.fontSize = Math.floor(cellPx * 0.76) + 'px';
+
+  // Set each sq to explicit pixel height so rows don't collapse
+  document.querySelectorAll('#board .sq').forEach(sq => {
+    sq.style.height = cellPx + 'px';
+  });
 }
 
 // Re-size on window resize and orientation change
