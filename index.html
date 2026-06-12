@@ -1,0 +1,1630 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>忍術技能特效 · AAA WebGL Edition</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI','Noto Sans TC',sans-serif}
+#glc{position:fixed;top:0;left:0;width:100%;height:100%;z-index:1}
+#c2{position:fixed;top:0;left:0;width:100%;height:100%;z-index:2;pointer-events:none}
+#ui{position:fixed;bottom:0;left:0;right:0;z-index:10;padding:14px 20px 22px;
+  background:linear-gradient(transparent,rgba(0,0,0,0.96));
+  display:flex;flex-direction:column;align-items:center;gap:11px}
+#title{color:#fff;font-size:26px;font-weight:900;letter-spacing:5px;
+  text-shadow:0 0 30px currentColor;min-height:38px;text-align:center;
+  text-transform:uppercase;transition:color .3s,text-shadow .3s}
+
+#btns{display:flex;gap:9px;flex-wrap:wrap;justify-content:center}
+.sb{padding:11px 20px;border:none;border-radius:10px;font-size:13px;font-weight:800;
+  cursor:pointer;letter-spacing:1px;transition:transform .12s,filter .2s;
+  position:relative;overflow:hidden;user-select:none}
+.sb:hover{transform:scale(1.1);filter:brightness(1.3)}
+.sb:active{transform:scale(.93)}
+.sb::after{content:'';position:absolute;inset:0;background:rgba(255,255,255,.15);
+  transform:translateX(-100%);transition:.3s}
+.sb:hover::after{transform:translateX(0)}
+.b0{background:linear-gradient(135deg,#1a4fff,#00aaff);color:#fff;box-shadow:0 4px 24px #00aaff55}
+.b1{background:linear-gradient(135deg,#ffe066,#fff);color:#333;box-shadow:0 4px 24px #ffe06655}
+.b2{background:linear-gradient(135deg,#ff3300,#ff9900);color:#fff;box-shadow:0 4px 24px #ff440055}
+.b3{background:linear-gradient(135deg,#66ccff,#ddf4ff);color:#125;box-shadow:0 4px 24px #66ccff55}
+.b4{background:linear-gradient(135deg,#22dd66,#aaffcc);color:#041;box-shadow:0 4px 24px #22dd6655}
+.b5{background:linear-gradient(135deg,#ffee00,#ff8800);color:#200;box-shadow:0 4px 24px #ffee0055}
+#mbar{width:280px;height:4px;background:rgba(255,255,255,.1);border-radius:2px;overflow:hidden}
+#mfill{height:100%;width:0%;border-radius:2px;transition:width .04s}
+#fps{position:fixed;top:10px;left:14px;color:rgba(255,255,255,.3);font-size:11px;font-family:monospace;z-index:20}
+#combo{position:fixed;top:60px;left:50%;transform:translateX(-50%);
+  color:#ffee00;font-size:32px;font-weight:900;text-shadow:0 0 20px #ffee00;
+  opacity:0;transition:opacity .3s;z-index:20;font-family:monospace;pointer-events:none}
+</style>
+</head>
+<body>
+<canvas id="glc"></canvas>
+<canvas id="c2"></canvas>
+<div id="fps">-- FPS</div>
+<div id="combo"></div>
+<div id="ui">
+  <div id="title">選擇你的技能</div>
+  <div id="btns">
+    <button class="sb b0" onclick="CAST(0)">🌀 螺旋丸</button>
+    <button class="sb b1" onclick="CAST(1)">⚔️ 神聖斬擊</button>
+    <button class="sb b2" onclick="CAST(2)">🔥 烈焰爆炸</button>
+    <button class="sb b3" onclick="CAST(3)">❄️ 冰凍術</button>
+    <button class="sb b4" onclick="CAST(4)">🌪️ 旋風術</button>
+    <button class="sb b5" onclick="CAST(5)">⚡ 閃電術</button>
+  </div>
+  <div id="mbar"><div id="mfill"></div></div>
+</div>
+
+<script>
+/* ================================================================
+   AAA SKILL EFFECTS ENGINE — WebGL + Canvas2D Hybrid
+   • WebGL particle system (GPU instanced, 50k particles)
+   • GLSL bloom / radial blur post-process
+   • Canvas2D overlay: bolts, waves, orbs, UI
+   • Turbulence / curl-noise field
+   • Delta-time physics, camera shake
+   • Per-skill multi-phase choreography
+   ================================================================ */
+
+/* ── WebGL setup ── */
+const GLC = document.getElementById('glc');
+const C2  = document.getElementById('c2');
+const ctx  = C2.getContext('2d');
+let gl, W, H, CX, CY;
+
+function resize(){
+  W = GLC.width = C2.width = innerWidth;
+  H = GLC.height = C2.height = innerHeight;
+  CX = W/2; CY = H * 0.42;
+  if(gl){ gl.viewport(0,0,W,H); }
+}
+
+/* ── WebGL init ── */
+function initGL(){
+  gl = GLC.getContext('webgl',{alpha:true,premultipliedAlpha:false,antialias:false});
+  if(!gl){ console.warn('no webgl'); return; }
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE); /* additive blend for magic FX */
+  gl.clearColor(0,0,0,0);
+
+  compileShaders();
+  initParticleBuffers();
+  initBloomFBO();
+}
+
+/* ── GLSL shaders ── */
+const VS_PARTICLE = `
+precision mediump float;
+attribute vec2 a_pos;
+attribute vec4 a_col;
+attribute float a_size;
+attribute float a_alpha;
+uniform vec2 u_res;
+uniform vec2 u_cam;
+varying vec4 v_col;
+varying float v_alpha;
+void main(){
+  vec2 p = (a_pos + u_cam) / u_res * 2.0 - 1.0;
+  p.y = -p.y;
+  gl_Position = vec4(p, 0.0, 1.0);
+  gl_PointSize = a_size;
+  v_col = a_col;
+  v_alpha = a_alpha;
+}`;
+
+const FS_PARTICLE = `
+precision mediump float;
+varying vec4 v_col;
+varying float v_alpha;
+void main(){
+  vec2 uv = gl_PointCoord - 0.5;
+  float d = dot(uv,uv)*4.0;
+  float alpha = (1.0 - d) * v_alpha;
+  if(alpha < 0.01) discard;
+  /* soft glow core */
+  float core = exp(-d * 3.0) * v_alpha;
+  gl_FragColor = vec4(v_col.rgb * (alpha + core * 1.5), alpha);
+}`;
+
+const VS_BLOOM = `
+precision mediump float;
+attribute vec2 a_pos;
+varying vec2 v_uv;
+void main(){
+  v_uv = a_pos * 0.5 + 0.5;
+  gl_Position = vec4(a_pos, 0.0, 1.0);
+}`;
+
+const FS_BLOOM = `
+precision mediump float;
+uniform sampler2D u_tex;
+uniform vec2 u_res;
+uniform float u_strength;
+varying vec2 v_uv;
+void main(){
+  vec4 col = vec4(0.0);
+  /* 13-tap Kawase-inspired bloom */
+  float w[5];
+  w[0]=0.227027; w[1]=0.194595; w[2]=0.121622; w[3]=0.054054; w[4]=0.016216;
+  vec2 px = 1.0 / u_res;
+  col += texture2D(u_tex, v_uv) * w[0];
+  for(int i=1;i<5;i++){
+    float fi = float(i);
+    vec2 off = px * fi * 3.0;
+    col += texture2D(u_tex, v_uv + vec2(off.x,0.0)) * w[i];
+    col += texture2D(u_tex, v_uv - vec2(off.x,0.0)) * w[i];
+    col += texture2D(u_tex, v_uv + vec2(0.0,off.y)) * w[i];
+    col += texture2D(u_tex, v_uv - vec2(0.0,off.y)) * w[i];
+  }
+  gl_FragColor = col * u_strength;
+}`;
+
+const FS_COMPOSE = `
+precision mediump float;
+uniform sampler2D u_scene;
+uniform sampler2D u_bloom;
+uniform vec2 u_res;
+varying vec2 v_uv;
+void main(){
+  vec4 scene = texture2D(u_scene, v_uv);
+  vec4 bloom = texture2D(u_bloom, v_uv);
+  /* tone-map + bloom add */
+  vec3 col = scene.rgb + bloom.rgb * 1.8;
+  /* Reinhard tone mapping */
+  col = col / (col + vec3(1.0));
+  col = pow(col, vec3(1.0/2.2));
+  gl_FragColor = vec4(col, max(scene.a, bloom.a));
+}`;
+
+let progParticle, progBloom, progCompose;
+let attrPos,attrCol,attrSz,attrAlpha;
+let uRes,uCam;
+
+function mkShader(type,src){
+  const s=gl.createShader(type);
+  gl.shaderSource(s,src); gl.compileShader(s);
+  if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)) console.error(gl.getShaderInfoLog(s));
+  return s;
+}
+function mkProg(vs,fs){
+  const p=gl.createProgram();
+  gl.attachShader(p,mkShader(gl.VERTEX_SHADER,vs));
+  gl.attachShader(p,mkShader(gl.FRAGMENT_SHADER,fs));
+  gl.linkProgram(p);
+  return p;
+}
+function compileShaders(){
+  progParticle = mkProg(VS_PARTICLE, FS_PARTICLE);
+  progBloom    = mkProg(VS_BLOOM, FS_BLOOM);
+  progCompose  = mkProg(VS_BLOOM, FS_COMPOSE);
+}
+
+/* ── GPU Particle Buffers ── */
+const MAX_GPU = 60000;
+const gpu = {
+  pos:   new Float32Array(MAX_GPU * 2),
+  col:   new Float32Array(MAX_GPU * 4),
+  size:  new Float32Array(MAX_GPU),
+  alpha: new Float32Array(MAX_GPU),
+  count: 0,
+  vbPos: null, vbCol: null, vbSz: null, vbAl: null
+};
+
+function initParticleBuffers(){
+  gpu.vbPos = gl.createBuffer();
+  gpu.vbCol = gl.createBuffer();
+  gpu.vbSz  = gl.createBuffer();
+  gpu.vbAl  = gl.createBuffer();
+}
+
+function uploadGPU(){
+  const n = gpu.count;
+  gl.useProgram(progParticle);
+  const up=(buf,arr,attr,sz)=>{
+    gl.bindBuffer(gl.ARRAY_BUFFER,buf);
+    gl.bufferData(gl.ARRAY_BUFFER,arr.subarray(0,n*sz),gl.DYNAMIC_DRAW);
+    const loc=gl.getAttribLocation(progParticle,attr);
+    gl.enableVertexAttribArray(loc);
+    gl.vertexAttribPointer(loc,sz,gl.FLOAT,false,0,0);
+  };
+  up(gpu.vbPos,gpu.pos,'a_pos',2);
+  up(gpu.vbCol,gpu.col,'a_col',4);
+  up(gpu.vbSz, gpu.size,'a_size',1);
+  up(gpu.vbAl, gpu.alpha,'a_alpha',1);
+  const uRes=gl.getUniformLocation(progParticle,'u_res');
+  const uCam=gl.getUniformLocation(progParticle,'u_cam');
+  gl.uniform2f(uRes,W,H);
+  gl.uniform2f(uCam,cam.x,cam.y);
+}
+
+/* ── FBO for bloom ── */
+let fboScene, fboBloomA, fboBloomB, texScene, texBloomA, texBloomB;
+function mkFBO(){
+  const tex=gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D,tex);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,W,H,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+  const fbo=gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER,fbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,tex,0);
+  return{fbo,tex};
+}
+let quadBuf;
+function initBloomFBO(){
+  const a=mkFBO(); fboScene=a.fbo; texScene=a.tex;
+  const b=mkFBO(); fboBloomA=b.fbo; texBloomA=b.tex;
+  const c=mkFBO(); fboBloomB=c.fbo; texBloomB=c.tex;
+  quadBuf=gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER,quadBuf);
+  gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);
+}
+
+function drawQuad(prog,tex0,tex1){
+  gl.useProgram(prog);
+  gl.bindBuffer(gl.ARRAY_BUFFER,quadBuf);
+  const loc=gl.getAttribLocation(prog,'a_pos');
+  gl.enableVertexAttribArray(loc);
+  gl.vertexAttribPointer(loc,2,gl.FLOAT,false,0,0);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D,tex0);
+  gl.uniform1i(gl.getUniformLocation(prog,'u_tex'),0);
+  if(tex1){
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D,tex1);
+    gl.uniform1i(gl.getUniformLocation(prog,'u_scene'),0);
+    gl.uniform1i(gl.getUniformLocation(prog,'u_bloom'),1);
+  }
+  gl.uniform2f(gl.getUniformLocation(prog,'u_res'),W,H);
+  gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+}
+
+/* ================================================================
+   CPU PARTICLE SYSTEM (Canvas2D overlay)
+   Used for: lightning bolts, shockwaves, orbs, smoke, ice shards
+   ================================================================ */
+
+let particles=[], waves=[], bolts=[], orbs=[];
+let slashArcs=[], groundCracks=[];
+
+class Particle{
+  constructor(o){
+    this.x=o.x; this.y=o.y;
+    this.vx=o.vx||0; this.vy=o.vy||0;
+    this.life=o.life||60; this.ml=this.life;
+    this.sz=o.sz||4; this.col=o.col||'#fff';
+    this.type=o.type||'dot';
+    this.g=o.g||0; this.drag=o.drag||0.985;
+    this.rot=Math.random()*Math.PI*2;
+    this.rs=o.rs||0; this.glow=o.glow||false;
+    this.turbK=o.turbK||0;
+    this.trail=[]; this.keepTrail=o.keepTrail||false;
+    this.bloom=o.bloom||false;
+    this.scaleOut=o.scaleOut||false;
+  }
+  step(dt){
+    if(this.keepTrail){ this.trail.push([this.x,this.y]); if(this.trail.length>16) this.trail.shift(); }
+    if(this.turbK>0){ const tv=turbAt(this.x,this.y); this.vx+=tv.ax*this.turbK*dt; this.vy+=tv.ay*this.turbK*dt; }
+    this.x+=this.vx*dt; this.y+=this.vy*dt;
+    this.vy+=this.g*dt;
+    this.vx*=Math.pow(this.drag,dt); this.vy*=Math.pow(this.drag,dt);
+    this.life-=dt; this.rot+=this.rs*dt;
+  }
+  draw(){
+    const a=Math.max(0,this.life/this.ml);
+    if(a<0.01) return;
+    const sz=this.scaleOut? this.sz*(1-a+0.1) : this.sz;
+    ctx.save(); ctx.globalAlpha=a;
+    if(this.glow){ ctx.shadowColor=this.col; ctx.shadowBlur=sz*4; }
+    ctx.translate(this.x,this.y); ctx.rotate(this.rot);
+    ctx.fillStyle=this.col; ctx.strokeStyle=this.col;
+    switch(this.type){
+      case'dot': ctx.beginPath();ctx.arc(0,0,Math.max(.3,sz*a+.2),0,Math.PI*2);ctx.fill();break;
+      case'shard':
+        ctx.beginPath();ctx.moveTo(0,-sz*2.5);ctx.lineTo(sz*.6,sz);ctx.lineTo(-sz*.6,sz);ctx.closePath();ctx.fill();break;
+      case'spark':
+        ctx.lineWidth=Math.max(.5,2.5*a);ctx.lineCap='round';
+        ctx.beginPath();ctx.moveTo(-sz,0);ctx.lineTo(sz,0);ctx.stroke();break;
+      case'leaf':
+        ctx.beginPath();ctx.ellipse(0,0,sz*.4,sz,0,0,Math.PI*2);ctx.fill();break;
+      case'star':{
+        ctx.beginPath();
+        for(let i=0;i<5;i++){
+          const a1=i*Math.PI*2/5-Math.PI/2,a2=(i+.5)*Math.PI*2/5-Math.PI/2;
+          i===0?ctx.moveTo(Math.cos(a1)*sz,Math.sin(a1)*sz):ctx.lineTo(Math.cos(a1)*sz,Math.sin(a1)*sz);
+          ctx.lineTo(Math.cos(a2)*sz*.4,Math.sin(a2)*sz*.4);
+        }ctx.closePath();ctx.fill();break;}
+      case'ring':
+        ctx.lineWidth=2.5*a;ctx.beginPath();ctx.arc(0,0,sz,0,Math.PI*2);ctx.stroke();break;
+      case'cross':
+        ctx.lineWidth=3.5*a;ctx.lineCap='round';
+        ctx.beginPath();ctx.moveTo(-sz,0);ctx.lineTo(sz,0);ctx.stroke();
+        ctx.beginPath();ctx.moveTo(0,-sz);ctx.lineTo(0,sz);ctx.stroke();break;
+      case'smoke':
+        ctx.globalAlpha=a*.16;ctx.beginPath();ctx.arc(0,0,sz*(1.8-a*.5),0,Math.PI*2);ctx.fill();break;
+      case'hex':{
+        ctx.beginPath();
+        for(let i=0;i<6;i++){const ha=i*Math.PI/3;i===0?ctx.moveTo(Math.cos(ha)*sz,Math.sin(ha)*sz):ctx.lineTo(Math.cos(ha)*sz,Math.sin(ha)*sz);}
+        ctx.closePath();ctx.fill();break;}
+      case'ribbon':
+        if(this.trail.length>2){
+          ctx.globalAlpha=a*.7;ctx.lineWidth=sz*a;ctx.lineCap='round';
+          ctx.beginPath();
+          ctx.moveTo(this.trail[0][0]-this.x,this.trail[0][1]-this.y);
+          for(let i=1;i<this.trail.length;i++) ctx.lineTo(this.trail[i][0]-this.x,this.trail[i][1]-this.y);
+          ctx.stroke();
+        }break;
+      case'snowflake':
+        ctx.lineWidth=1.5*a;
+        for(let i=0;i<6;i++){
+          ctx.save();ctx.rotate(i*Math.PI/3);
+          ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(0,-sz);ctx.stroke();
+          ctx.beginPath();ctx.moveTo(0,-sz*.5);ctx.lineTo(sz*.3,-sz*.7);ctx.stroke();
+          ctx.beginPath();ctx.moveTo(0,-sz*.5);ctx.lineTo(-sz*.3,-sz*.7);ctx.stroke();
+          ctx.restore();
+        }break;
+      case'lightning_orb':
+        ctx.beginPath();ctx.arc(0,0,sz*.7,0,Math.PI*2);
+        const og=ctx.createRadialGradient(0,0,0,0,0,sz*.7);
+        og.addColorStop(0,'rgba(255,255,255,.9)');og.addColorStop(1,this.col.replace(')',',0)').replace('rgb','rgba'));
+        ctx.fillStyle=og;ctx.fill();break;
+    }
+    ctx.restore();
+  }
+}
+
+function P(o){ const p=new Particle(o); particles.push(p); return p; }
+
+class Wave{
+  constructor(x,y,col,maxR,thick,life,fill,ellipseY){
+    this.x=x;this.y=y;this.col=col;this.maxR=maxR;
+    this.thick=thick||3;this.life=life||60;this.ml=this.life;
+    this.r=0;this.fill=fill||false;this.ey=ellipseY||1;
+  }
+  step(dt){this.r+=this.maxR/this.ml*dt;this.life-=dt;}
+  draw(){
+    const a=Math.max(0,this.life/this.ml);
+    ctx.save();ctx.globalAlpha=a*.75;
+    ctx.strokeStyle=this.col;ctx.lineWidth=this.thick*(1-this.r/this.maxR)+.5;
+    ctx.shadowColor=this.col;ctx.shadowBlur=25;
+    ctx.translate(this.x,this.y);ctx.scale(1,this.ey);
+    ctx.beginPath();ctx.arc(0,0,this.r,0,Math.PI*2);ctx.stroke();
+    if(this.fill){ctx.globalAlpha=a*.055;ctx.fillStyle=this.col;ctx.fill();}
+    ctx.restore();
+  }
+}
+
+function W2(o){ const w=new Wave(o.x,o.y,o.col,o.maxR,o.thick,o.life,o.fill,o.ey); waves.push(w); return w; }
+
+/* ── Lightning bolt (recursive branching) ── */
+class Bolt{
+  constructor(x1,y1,x2,y2,col,w,life,segs,depth){
+    this.pts=this.zz(x1,y1,x2,y2,segs||12);
+    this.col=col;this.w=w||2;this.life=life||22;this.ml=this.life;
+    this.branches=[];this.depth=depth||0;
+    if(depth<2&&w>1.5&&Math.random()<.65){
+      const idx=2+Math.floor(Math.random()*(this.pts.length-4));
+      const [bx,by]=this.pts[idx];
+      const ba=Math.random()*Math.PI*2;
+      const bl=60+Math.random()*100;
+      this.branches.push(new Bolt(bx,by,bx+Math.cos(ba)*bl,by+Math.sin(ba)*bl,col,w*.55,life*.7,8,depth+1));
+    }
+  }
+  zz(x1,y1,x2,y2,s){
+    const p=[[x1,y1]];
+    for(let i=1;i<s;i++){
+      const t=i/s,mx=x1+(x2-x1)*t,my=y1+(y2-y1)*t;
+      const off=(Math.random()-.5)*100*(1-Math.abs(t-.5)*1.8);
+      const dx=y2-y1,dy=x1-x2,l=Math.sqrt(dx*dx+dy*dy)||1;
+      p.push([mx+dx/l*off,my+dy/l*off]);
+    }p.push([x2,y2]);return p;
+  }
+  step(dt){this.life-=dt;this.branches.forEach(b=>b.step(dt));}
+  draw(){
+    const a=Math.max(0,this.life/this.ml);
+    ctx.save();ctx.globalAlpha=a;
+    ctx.strokeStyle=this.col;ctx.shadowColor=this.col;ctx.shadowBlur=28;
+    ctx.lineWidth=this.w;ctx.lineJoin='round';ctx.lineCap='round';
+    ctx.beginPath();
+    this.pts.forEach((p,i)=>i===0?ctx.moveTo(p[0],p[1]):ctx.lineTo(p[0],p[1]));
+    ctx.stroke();
+    this.branches.forEach(b=>b.draw());
+    ctx.restore();
+  }
+}
+
+function BOLT(o){ const b=new Bolt(o.x1,o.y1,o.x2,o.y2,o.col,o.w,o.life,o.segs,o.depth); bolts.push(b); return b; }
+
+/* ================================================================
+   TURBULENCE / CURL-NOISE FIELD
+   ================================================================ */
+const TCOLS=24, TROWS=18;
+let turbGrid=[];
+let turbTime=0;
+
+function initTurb(){
+  for(let r=0;r<TROWS;r++){turbGrid[r]=[];for(let c=0;c<TCOLS;c++) turbGrid[r][c]={a:Math.random()*Math.PI*2,s:0};}
+}
+initTurb();
+
+/* smooth noise helpers */
+function hash(n){return Math.sin(n)*43758.5453123%1;}
+function noise2(x,y){
+  const ix=Math.floor(x),iy=Math.floor(y),fx=x-ix,fy=y-iy;
+  const s=t=>t*t*(3-2*t);
+  const a=hash(ix+iy*57),b=hash(ix+1+iy*57),c=hash(ix+(iy+1)*57),d=hash(ix+1+(iy+1)*57);
+  return a+s(fx)*(b-a)+s(fy)*(c-a)+s(fx)*s(fy)*(a-b-c+d);
+}
+
+function updateTurb(dt){
+  turbTime+=dt*.012;
+  for(let r=0;r<TROWS;r++){
+    for(let c=0;c<TCOLS;c++){
+      /* curl noise from two noise fields */
+      const px=c*.4+turbTime*.7, py=r*.4+turbTime*.5;
+      const n1=noise2(px,py+.1)-noise2(px,py-.1);
+      const n2=noise2(px+.1,py)-noise2(px-.1,py);
+      turbGrid[r][c].a=Math.atan2(n1,n2)+turbTime;
+      if(turbGrid[r][c].s>0) turbGrid[r][c].s*=.975;
+    }
+  }
+}
+
+function blastTurb(x,y,str){
+  for(let r=0;r<TROWS;r++) for(let c=0;c<TCOLS;c++){
+    const tx=(c/TCOLS)*W,ty=(r/TROWS)*H,dx=tx-x,dy=ty-y,d=Math.sqrt(dx*dx+dy*dy)||1;
+    const f=Math.max(0,1-d/420);
+    turbGrid[r][c].s+=str*f;
+    if(f>.05) turbGrid[r][c].a=Math.atan2(dy,dx);
+  }
+}
+
+function turbAt(px,py){
+  const c=Math.max(0,Math.min(TCOLS-1,Math.floor((px/W)*TCOLS)));
+  const r=Math.max(0,Math.min(TROWS-1,Math.floor((py/H)*TROWS)));
+  const t=turbGrid[r][c];
+  const s=t.s+.08;
+  return{ax:Math.cos(t.a)*s, ay:Math.sin(t.a)*s};
+}
+
+/* ================================================================
+   CAMERA SHAKE
+   ================================================================ */
+const cam={x:0,y:0,str:0,t:0};
+function SHAKE(str,dur){ cam.str=Math.max(cam.str,str); cam.t=Math.max(cam.t,dur); }
+function updateCam(dt){
+  if(cam.t>0){
+    cam.x=(Math.random()-.5)*cam.str*2;
+    cam.y=(Math.random()-.5)*cam.str*2;
+    cam.t-=dt; cam.str*=Math.pow(.9,dt);
+  } else { cam.x*=.8; cam.y*=.8; }
+}
+
+/* ================================================================
+   GPU PARTICLE EMITTER
+   ================================================================ */
+/* CPU-side physics for GPU particles */
+let gpuLive=[];
+const MAX_GPU_LIVE=50000;
+
+class GPUParticle{
+  constructor(x,y,vx,vy,life,sz,r,g,b,a2){
+    this.x=x;this.y=y;this.vx=vx;this.vy=vy;
+    this.life=life;this.ml=life;
+    this.sz=sz;this.r=r;this.g=g;this.b=b;this.ba=a2;
+    this.grav=0;this.drag=.985;this.turbK=0;
+  }
+  step(dt){
+    if(this.turbK>0){const tv=turbAt(this.x,this.y);this.vx+=tv.ax*this.turbK*dt;this.vy+=tv.ay*this.turbK*dt;}
+    this.x+=this.vx*dt;this.y+=this.vy*dt;
+    this.vy+=this.grav*dt;
+    this.vx*=Math.pow(this.drag,dt);this.vy*=Math.pow(this.drag,dt);
+    this.life-=dt;
+  }
+}
+
+function GPU(x,y,vx,vy,life,sz,r,gg,b,a2,grav,drag,turbK){
+  if(gpuLive.length>=MAX_GPU_LIVE) return;
+  const p=new GPUParticle(x,y,vx,vy,life,sz,r,gg,b,a2||1);
+  if(grav!==undefined) p.grav=grav;
+  if(drag!==undefined) p.drag=drag;
+  if(turbK!==undefined) p.turbK=turbK;
+  gpuLive.push(p);
+}
+
+function buildGPUArrays(){
+  const n=Math.min(gpuLive.length,MAX_GPU);
+  gpu.count=n;
+  for(let i=0;i<n;i++){
+    const p=gpuLive[i];
+    const a=Math.max(0,p.life/p.ml)*p.ba;
+    gpu.pos[i*2]=p.x+cam.x; gpu.pos[i*2+1]=p.y+cam.y;
+    gpu.col[i*4]=p.r; gpu.col[i*4+1]=p.g; gpu.col[i*4+2]=p.b; gpu.col[i*4+3]=a;
+    gpu.size[i]=p.sz*Math.max(.3,a+.1);
+    gpu.alpha[i]=a;
+  }
+}
+
+/* ================================================================
+   STAR FIELD
+   ================================================================ */
+const STARS=Array.from({length:200},(_,i)=>({
+  x:(i*137.508)%1920, y:(i*97.311)%1080,
+  t:Math.random()*Math.PI*2, s:Math.random()*1.8+.2, sp:Math.random()*.012+.004
+}));
+
+/* ================================================================
+   BACKGROUND
+   ================================================================ */
+let bgR=10,bgG=10,bgB=26;
+let flashR=0,flashG=0,flashB=0,flashA=0;
+function FLASH(r,g,b,a){ flashR=r;flashG=g;flashB=b;flashA=Math.max(flashA,a); }
+
+function drawBG(dt){
+  /* gradient sky */
+  const grad=ctx.createLinearGradient(0,0,0,H);
+  grad.addColorStop(0,`rgb(${bgR|0},${bgG|0},${bgB|0})`);
+  grad.addColorStop(1,`rgb(${Math.max(0,bgR-8)|0},${Math.max(0,bgG-8)|0},${Math.max(0,bgB-8)|0})`);
+  ctx.fillStyle=grad; ctx.fillRect(0,0,W,H);
+  /* flash overlay */
+  if(flashA>.01){
+    ctx.globalAlpha=flashA;
+    ctx.fillStyle=`rgb(${flashR|0},${flashG|0},${flashB|0})`;
+    ctx.fillRect(0,0,W,H);
+    ctx.globalAlpha=1;
+    flashA*=Math.pow(.88,dt);
+  }
+  /* stars */
+  STARS.forEach(s=>{
+    s.t+=s.sp*dt;
+    const bri=(Math.sin(s.t)*.5+.5)*.7+.12;
+    ctx.globalAlpha=bri;ctx.fillStyle='#fff';
+    ctx.beginPath();ctx.arc((s.x/1920)*W,(s.y/1080)*H,s.s,0,Math.PI*2);ctx.fill();
+  });
+  ctx.globalAlpha=1;
+}
+
+function drawGround(){
+  const gy=H*.7;
+  const grd=ctx.createLinearGradient(0,gy,0,H);
+  grd.addColorStop(0,'rgba(0,0,0,0)');grd.addColorStop(1,'rgba(0,0,0,.8)');
+  ctx.fillStyle=grd; ctx.fillRect(0,gy,W,H);
+  /* skill glow pool */
+  if(activeSkill>=0){
+    const sd=SKILLS[activeSkill];
+    ctx.save();ctx.globalAlpha=.22;
+    ctx.shadowColor=sd.col;ctx.shadowBlur=80;
+    ctx.fillStyle=sd.col;
+    ctx.beginPath();ctx.ellipse(CX,gy,260,32,0,0,Math.PI*2);ctx.fill();
+    ctx.restore();
+  }
+}
+
+function drawVignette(){
+  const g=ctx.createRadialGradient(W/2,H/2,H*.25,W/2,H/2,H*.9);
+  g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(1,'rgba(0,0,0,.68)');
+  ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+}
+
+/* ================================================================
+   SKILL DEFINITIONS
+   ================================================================ */
+const SKILLS=[
+  {name:'螺旋丸',sub:'RASENGAN · 千年殺一擊',col:'#00ccff',bg:[0,10,42]},
+  {name:'神聖斬擊',sub:'HOLY SLASH · 神之審判',col:'#ffe066',bg:[22,18,0]},
+  {name:'烈焰爆炸',sub:'INFERNO · 業火焚盡',col:'#ff6600',bg:[36,6,0]},
+  {name:'冰凍術',sub:'ABSOLUTE ZERO · 絕對零度',col:'#88ddff',bg:[0,12,30]},
+  {name:'旋風術',sub:'CYCLONE · 神風之怒',col:'#44ff88',bg:[0,18,10]},
+  {name:'閃電術',sub:'THUNDER GOD · 雷神降臨',col:'#ffee00',bg:[18,14,0]},
+];
+
+let activeSkill=-1;
+let comboN=0,comboT=0;
+let manaT=0;
+
+function setTitle(id){
+  const sd=SKILLS[id];
+  const el=document.getElementById('title');
+  el.textContent=sd.name; el.style.color=sd.col;
+  el.style.textShadow=`0 0 30px ${sd.col},0 0 80px ${sd.col}`;
+  [bgR,bgG,bgB]=sd.bg;
+}
+
+/* ================================================================
+   CAST FUNCTIONS
+   ================================================================ */
+function rand(a,b){return a+(b-a)*Math.random();}
+function rc(arr){return arr[Math.floor(Math.random()*arr.length)];}
+function D(fn,ms){setTimeout(fn,ms);}
+
+function CAST(id){
+  activeSkill=id;
+  setTitle(id);
+  particles=[];waves=[];bolts=[];gpuLive=[];slashArcs=[];groundCracks=[];
+  SHAKE(20,50); blastTurb(CX,CY,3);
+  manaT=0;
+  comboN++; comboT=2200;
+  if(comboN>1){
+    const el=document.getElementById('combo');
+    el.textContent=`×${comboN} COMBO`;el.style.opacity='1';
+  }
+  FLASH(200,200,200,.6);
+  if(id===0) castRasengan();
+  else if(id===1) castHoly();
+  else if(id===2) castFire();
+  else if(id===3) castIce();
+  else if(id===4) castWind();
+  else castThunder();
+}
+
+/* ════════════════════════════════════════
+   0 · 螺旋丸 RASENGAN
+   多層螺旋環繞 + 中心能量球 + 衝擊波
+   ════════════════════════════════════════ */
+function castRasengan(){
+  const cx=CX,cy=CY;
+  SHAKE(18,45); FLASH(0,100,255,.7);
+  /* shockwaves — 3 rings */
+  W2({x:cx,y:cy,col:'#00aaff',maxR:520,thick:5,life:80,fill:true});
+  W2({x:cx,y:cy,col:'#ffffff',maxR:260,thick:3,life:60});
+  W2({x:cx,y:cy,col:'#00ccff',maxR:140,thick:2,life:45});
+  D(()=>{W2({x:cx,y:cy,col:'#0088ff',maxR:400,thick:3,life:55});SHAKE(8,20);},420);
+  D(()=>{W2({x:cx,y:cy,col:'#ffffff',maxR:320,thick:2,life:40});},750);
+
+  /* GPU — 10 spiral rings × 50 particles */
+  for(let ring=0;ring<10;ring++){
+    const cnt=45+ring*12, r2=20+ring*40, lf=100+ring*14;
+    for(let i=0;i<cnt;i++){
+      const angle=(i/cnt)*Math.PI*2+ring*.35;
+      const sp=1.6+ring*.32, spr=.05*(ring+1);
+      const vx=Math.cos(angle+Math.PI/2)*sp+Math.cos(angle)*spr;
+      const vy=Math.sin(angle+Math.PI/2)*sp+Math.sin(angle)*spr;
+      const bright=ring<3?1.0:.7;
+      GPU(cx+Math.cos(angle)*r2,cy+Math.sin(angle)*r2,
+        vx,vy,lf,4.5-ring*.3,
+        ring%2===0?0:bright, ring%2===0?bright:bright, 1,1, 0,.986,.04);
+    }
+  }
+
+  /* GPU — center vortex burst 800 particles */
+  for(let i=0;i<800;i++){
+    const a=Math.random()*Math.PI*2, s=rand(.5,8), r2=rand(0,35);
+    GPU(cx+Math.cos(a)*r2,cy+Math.sin(a)*r2,
+      Math.cos(a)*s,Math.sin(a)*s,
+      55+rand(0,35),4+rand(0,5),
+      0,rand(.7,1),1,1, 0,.982,.06);
+  }
+
+  /* GPU — outer scatter */
+  for(let i=0;i<400;i++){
+    const a=Math.random()*Math.PI*2, s=rand(5,18);
+    GPU(cx,cy,Math.cos(a)*s,Math.sin(a)*s,50+rand(0,30),3+rand(0,4),
+      0,rand(.5,1),1,1, .05,.972,.03);
+  }
+
+  /* CPU — plasma ribbons */
+  for(let i=0;i<28;i++){
+    const a=Math.random()*Math.PI*2,s=rand(3,9),r2=rand(5,45);
+    P({x:cx+Math.cos(a)*r2,y:cy+Math.sin(a)*r2,
+      vx:Math.cos(a+Math.PI/2)*s,vy:Math.sin(a+Math.PI/2)*s,
+      life:85,sz:3,col:'#00eeff',glow:true,type:'ribbon',keepTrail:true,turbK:.1});
+  }
+
+  /* CPU — crystal shards */
+  for(let i=0;i<45;i++){
+    const a=Math.random()*Math.PI*2,s=rand(4,12);
+    P({x:cx+Math.cos(a)*22,y:cy+Math.sin(a)*22,
+      vx:Math.cos(a)*s,vy:Math.sin(a)*s,
+      life:55,sz:5+rand(0,7),col:'#aaeeff',glow:true,rs:rand(-.22,.22),type:'shard'});
+  }
+
+  /* delayed second burst */
+  D(()=>{
+    SHAKE(12,28);FLASH(0,80,200,.5);
+    for(let i=0;i<500;i++){
+      const a=Math.random()*Math.PI*2,s=rand(2,10),r2=rand(0,220);
+      GPU(cx+Math.cos(a)*r2,cy+Math.sin(a)*r2,
+        Math.cos(a)*s,Math.sin(a)*s,
+        45,3+rand(0,5),0,rand(.6,1),1,1, 0,.98,.02);
+    }
+    for(let i=0;i<30;i++){
+      P({x:cx,y:cy,vx:rand(-8,8),vy:rand(-8,8),
+        life:40,sz:8+rand(0,10),col:'#00ccff',glow:true,bloom:true,type:'ring'});
+    }
+  },600);
+
+  /* third explosive ring */
+  D(()=>{
+    SHAKE(15,30);FLASH(100,200,255,.6);
+    W2({x:cx,y:cy,col:'#00aaff',maxR:600,thick:6,life:70,fill:true});
+    for(let i=0;i<600;i++){
+      const a=Math.random()*Math.PI*2,s=rand(6,22);
+      GPU(cx,cy,Math.cos(a)*s,Math.sin(a)*s,
+        60,5+rand(0,7),.0,rand(.5,1),1,1, .04,.97,.02);
+    }
+    for(let i=0;i<50;i++){
+      const a=Math.random()*Math.PI*2,s=rand(3,8);
+      P({x:cx,y:cy,vx:Math.cos(a)*s,vy:Math.sin(a)*s,
+        life:60,sz:6+rand(0,8),col:rc(['#00ccff','#88eeff','#ffffff']),
+        glow:true,rs:rand(-.15,.15),type:'star'});
+    }
+  },1000);
+}
+
+/* ════════════════════════════════════════
+   1 · 神聖斬擊 HOLY SLASH
+   劍氣斬擊: 弧形劍痕 + 殘影 + 衝擊裂縫 + 聖光迸發
+   ════════════════════════════════════════ */
+
+/* SlashArc: draws an animated sword-arc sweep on Canvas2D */
+class SlashArc{
+  constructor(cx,cy,startAngle,sweepAngle,radius,col,width,life){
+    this.cx=cx; this.cy=cy;
+    this.startA=startAngle; this.sweepA=sweepAngle;
+    this.radius=radius; this.col=col; this.width=width;
+    this.life=life; this.ml=life;
+    this.progress=0; /* 0→1 sweep progress */
+    this.afterimages=[]; /* [{progress, alpha}] */
+  }
+  step(dt){
+    /* leave afterimage every few frames */
+    if(this.progress<1 && Math.floor(this.progress*20)!==Math.floor((this.progress+dt*.06)*20)){
+      this.afterimages.push({p:this.progress, a:.7});
+    }
+    this.progress=Math.min(1,this.progress+dt*.07);
+    this.afterimages.forEach(ai=>ai.a*=.82);
+    this.afterimages=this.afterimages.filter(ai=>ai.a>.02);
+    this.life-=dt;
+  }
+  drawArc(p0,p1,alpha,widthMul){
+    if(p1<=p0) return;
+    const sa=this.startA+this.sweepA*p0;
+    const ea=this.startA+this.sweepA*p1;
+    ctx.save();
+    ctx.globalAlpha=alpha;
+    ctx.strokeStyle=this.col;
+    ctx.lineWidth=this.width*widthMul;
+    ctx.lineCap='round';
+    ctx.shadowColor=this.col; ctx.shadowBlur=this.width*5;
+    ctx.beginPath();
+    ctx.arc(this.cx,this.cy,this.radius,sa,ea,this.sweepA<0);
+    ctx.stroke();
+    /* inner bright core */
+    ctx.globalAlpha=alpha*.6;
+    ctx.strokeStyle='#ffffff';
+    ctx.lineWidth=this.width*widthMul*.35;
+    ctx.shadowBlur=this.width*3;
+    ctx.beginPath();
+    ctx.arc(this.cx,this.cy,this.radius,sa,ea,this.sweepA<0);
+    ctx.stroke();
+    ctx.restore();
+  }
+  draw(){
+    const a=Math.max(0,this.life/this.ml);
+    /* afterimages */
+    this.afterimages.forEach(ai=>{
+      this.drawArc(0,ai.p, ai.a*a*.5, .7);
+    });
+    /* main arc */
+    this.drawArc(0,this.progress, a, 1);
+    /* tip flare at leading edge */
+    if(this.progress<1){
+      const tipAngle=this.startA+this.sweepA*this.progress;
+      const tx=this.cx+Math.cos(tipAngle)*this.radius;
+      const ty=this.cy+Math.sin(tipAngle)*this.radius;
+      ctx.save();
+      ctx.globalAlpha=a*.9;
+      ctx.fillStyle='#ffffff';
+      ctx.shadowColor=this.col; ctx.shadowBlur=30;
+      ctx.beginPath(); ctx.arc(tx,ty,this.width*.8,0,Math.PI*2); ctx.fill();
+      ctx.restore();
+    }
+  }
+}
+
+/* Ground crack line */
+class GroundCrack{
+  constructor(x1,y1,x2,y2,col,life){
+    this.pts=this.zigzag(x1,y1,x2,y2,14);
+    this.col=col; this.life=life; this.ml=life;
+    this.progress=0;
+  }
+  zigzag(x1,y1,x2,y2,s){
+    const p=[[x1,y1]];
+    for(let i=1;i<s;i++){
+      const t=i/s,mx=x1+(x2-x1)*t,my=y1+(y2-y1)*t;
+      const perp=(Math.random()-.5)*40;
+      const dx=y2-y1,dy=x1-x2,l=Math.sqrt(dx*dx+dy*dy)||1;
+      p.push([mx+dx/l*perp,my+dy/l*perp]);
+    }
+    p.push([x2,y2]); return p;
+  }
+  step(dt){ this.progress=Math.min(1,this.progress+dt*.05); this.life-=dt; }
+  draw(){
+    const a=Math.max(0,this.life/this.ml);
+    const visEnd=Math.floor(this.progress*this.pts.length);
+    if(visEnd<2) return;
+    ctx.save();
+    ctx.globalAlpha=a*.85;
+    ctx.strokeStyle=this.col;
+    ctx.shadowColor=this.col; ctx.shadowBlur=12;
+    ctx.lineWidth=3*a+.5; ctx.lineCap='round';
+    ctx.beginPath();
+    ctx.moveTo(this.pts[0][0],this.pts[0][1]);
+    for(let i=1;i<visEnd;i++) ctx.lineTo(this.pts[i][0],this.pts[i][1]);
+    ctx.stroke();
+    /* glow fill between cracks */
+    ctx.globalAlpha=a*.12;
+    ctx.fillStyle=this.col;
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+let slashArcs=[];
+let groundCracks=[];
+
+function castHoly(){
+  const cx=CX, cy=CY;
+  SHAKE(20,45); FLASH(255,240,100,.8);
+
+  /* ── PHASE 1: SWORD WINDUP GLOW (0ms) ── */
+  /* charge orb at center */
+  for(let i=0;i<60;i++){
+    const a=Math.random()*Math.PI*2, s=rand(1,4), r2=rand(5,30);
+    P({x:cx+Math.cos(a)*r2,y:cy+Math.sin(a)*r2,
+      vx:Math.cos(a+Math.PI/2)*s,vy:Math.sin(a+Math.PI/2)*s,
+      life:35,sz:3+rand(0,3),col:rc(['#ffe066','#ffffff','#fffbe8']),
+      glow:true,type:'dot',rs:.1});
+  }
+  /* windup ring contracting inward */
+  W2({x:cx,y:cy,col:'#ffe066',maxR:200,thick:3,life:25});
+
+  /* ── PHASE 2: FIRST SLASH ARC — diagonal top-left to bottom-right (80ms) ── */
+  D(()=>{
+    SHAKE(28,50); FLASH(255,250,180,1);
+    /* main slash arc: sweep from upper-left direction clockwise */
+    slashArcs.push(new SlashArc(cx,cy, -Math.PI*.85, Math.PI*.7, W*.55, '#ffffff', 18, 55));
+    slashArcs.push(new SlashArc(cx,cy, -Math.PI*.85, Math.PI*.7, W*.55, '#ffe066', 12, 50));
+    slashArcs.push(new SlashArc(cx,cy, -Math.PI*.85, Math.PI*.7, W*.55*1.06, '#fff5aa', 7, 45));
+    /* second arc slightly offset — gives thickness */
+    slashArcs.push(new SlashArc(cx,cy, -Math.PI*.82, Math.PI*.66, W*.52, '#fffbe8', 9, 48));
+
+    /* slash wave: elliptical shockwave along slash direction */
+    W2({x:cx,y:cy,col:'#ffffff',maxR:420,thick:5,life:55,fill:true});
+    W2({x:cx,y:cy,col:'#ffe066',maxR:280,thick:3,life:45});
+
+    /* sparks exploding along slash path */
+    for(let i=0;i<20;i++){
+      const slashAngle=-Math.PI*.85+(.7*Math.PI)*(i/20);
+      const r2=rand(W*.3,W*.55);
+      const sx=cx+Math.cos(slashAngle)*r2, sy=cy+Math.sin(slashAngle)*r2;
+      /* perpendicular scatter */
+      const perpA=slashAngle+Math.PI/2;
+      for(let j=0;j<8;j++){
+        const s2=rand(3,12);
+        P({x:sx,y:sy,
+          vx:Math.cos(perpA+rand(-.5,.5))*s2,vy:Math.sin(perpA+rand(-.5,.5))*s2,
+          life:30+rand(0,25),sz:3+rand(0,6),
+          col:rc(['#ffffff','#ffe066','#fff5aa']),glow:true,bloom:true,type:'spark',g:.1});
+      }
+      /* impact star at tip */
+      if(i%5===0){
+        P({x:sx,y:sy,vx:0,vy:0,life:20,sz:12+rand(0,10),col:'#ffffff',glow:true,type:'star',rs:.2});
+      }
+    }
+
+    /* GPU slash streaks — high-speed particles along arc */
+    for(let i=0;i<400;i++){
+      const slashAngle=-Math.PI*.85+(Math.PI*.7)*(i/400);
+      const r2=rand(W*.25,W*.58);
+      const sx=cx+Math.cos(slashAngle)*r2, sy=cy+Math.sin(slashAngle)*r2;
+      const perpA=slashAngle+Math.PI/2*(Math.random()<.5?1:-1);
+      const s2=rand(4,16);
+      GPU(sx,sy,Math.cos(perpA)*s2,Math.sin(perpA)*s2,
+        25+rand(0,20),4+rand(0,7),1,rand(.88,1),rand(.3,.6),1, .05,.96,.0);
+    }
+
+    /* ground cracks radiating from center along slash direction */
+    for(let c=0;c<8;c++){
+      const crackAngle=-Math.PI*.85+(Math.PI*.7)*(c/8)+rand(-.1,.1);
+      const len=rand(W*.2,W*.4);
+      groundCracks.push(new GroundCrack(
+        cx+Math.cos(crackAngle)*20,cy+Math.sin(crackAngle)*20,
+        cx+Math.cos(crackAngle)*len,cy+Math.sin(crackAngle)*len,
+        '#ffe066',80));
+    }
+    /* ground flash */
+    for(let i=0;i<60;i++){
+      const a=Math.random()*Math.PI*2;
+      GPU(cx+Math.cos(a)*rand(0,W*.4),cy+H*.35,rand(-3,3),rand(-2,2),
+        40,6+rand(0,8),1,rand(.85,1),rand(.2,.5),1, 0,.985,.0);
+    }
+  },80);
+
+  /* ── PHASE 3: SECOND SLASH — opposite direction (260ms) ── */
+  D(()=>{
+    SHAKE(32,55); FLASH(255,245,150,.95);
+    /* counter-slash arc: upper-right to lower-left */
+    slashArcs.push(new SlashArc(cx,cy, -Math.PI*.15, -Math.PI*.7, W*.55, '#ffffff', 18, 55));
+    slashArcs.push(new SlashArc(cx,cy, -Math.PI*.15, -Math.PI*.7, W*.55, '#ffe066', 12, 50));
+    slashArcs.push(new SlashArc(cx,cy, -Math.PI*.15, -Math.PI*.7, W*.55*1.06, '#fff5aa', 7, 45));
+    slashArcs.push(new SlashArc(cx,cy, -Math.PI*.18, -Math.PI*.66, W*.52, '#fffbe8', 9, 48));
+
+    W2({x:cx,y:cy,col:'#ffffff',maxR:460,thick:5.5,life:58,fill:true});
+    W2({x:cx,y:cy,col:'#ffe066',maxR:300,thick:3.5,life:48});
+
+    for(let i=0;i<20;i++){
+      const slashAngle=-Math.PI*.15-(Math.PI*.7)*(i/20);
+      const r2=rand(W*.3,W*.55);
+      const sx=cx+Math.cos(slashAngle)*r2, sy=cy+Math.sin(slashAngle)*r2;
+      const perpA=slashAngle-Math.PI/2;
+      for(let j=0;j<8;j++){
+        const s2=rand(3,12);
+        P({x:sx,y:sy,
+          vx:Math.cos(perpA+rand(-.5,.5))*s2,vy:Math.sin(perpA+rand(-.5,.5))*s2,
+          life:30+rand(0,25),sz:3+rand(0,6),
+          col:rc(['#ffffff','#ffe066','#fff5aa']),glow:true,type:'spark',g:.1});
+      }
+      if(i%5===0) P({x:sx,y:sy,vx:0,vy:0,life:20,sz:12+rand(0,10),col:'#ffffff',glow:true,type:'star',rs:-.2});
+    }
+    for(let i=0;i<400;i++){
+      const slashAngle=-Math.PI*.15-(Math.PI*.7)*(i/400);
+      const r2=rand(W*.25,W*.58);
+      const sx=cx+Math.cos(slashAngle)*r2, sy=cy+Math.sin(slashAngle)*r2;
+      const perpA=slashAngle-Math.PI/2*(Math.random()<.5?1:-1);
+      const s2=rand(4,16);
+      GPU(sx,sy,Math.cos(perpA)*s2,Math.sin(perpA)*s2,
+        25+rand(0,20),4+rand(0,7),1,rand(.88,1),rand(.3,.6),1, .05,.96,.0);
+    }
+    /* more ground cracks counter-direction */
+    for(let c=0;c<8;c++){
+      const crackAngle=-Math.PI*.15-(Math.PI*.7)*(c/8)+rand(-.1,.1);
+      const len=rand(W*.2,W*.4);
+      groundCracks.push(new GroundCrack(
+        cx+Math.cos(crackAngle)*20,cy+Math.sin(crackAngle)*20,
+        cx+Math.cos(crackAngle)*len,cy+Math.sin(crackAngle)*len,
+        '#ffe066',80));
+    }
+  },260);
+
+  /* ── PHASE 4: VERTICAL OVERHEAD SLASH (460ms) ── */
+  D(()=>{
+    SHAKE(35,60); FLASH(255,255,200,1);
+    /* top-to-bottom vertical slash */
+    slashArcs.push(new SlashArc(cx,cy, -Math.PI*.5, Math.PI*.55, W*.6, '#ffffff', 22, 60));
+    slashArcs.push(new SlashArc(cx,cy, -Math.PI*.5, Math.PI*.55, W*.6, '#ffe066', 14, 55));
+    slashArcs.push(new SlashArc(cx,cy, -Math.PI*.47, Math.PI*.5, W*.57, '#fffbe8', 8, 50));
+    /* wide shockwave from vertical impact */
+    W2({x:cx,y:cy,col:'#ffffff',maxR:550,thick:7,life:70,fill:true});
+    W2({x:cx,y:cy,col:'#ffe066',maxR:360,thick:4,life:58});
+    W2({x:cx,y:cy,col:'#fff8aa',maxR:200,thick:3,life:45});
+    /* explosion burst */
+    for(let i=0;i<600;i++){
+      const a=Math.random()*Math.PI*2,s=rand(5,18);
+      GPU(cx,cy,Math.cos(a)*s,Math.sin(a)*s-2,
+        60+rand(0,50),5+rand(0,9),1,rand(.85,1),rand(.2,.55),1, -.06,.978,.01);
+    }
+    /* large vertical crack */
+    groundCracks.push(new GroundCrack(cx,cy-H*.05,cx+rand(-20,20),cy+H*.4,'#ffffff',100));
+    groundCracks.push(new GroundCrack(cx-15,cy-H*.05,cx+rand(-30,30),cy+H*.42,'#ffe066',90));
+    /* sparks along vertical arc */
+    for(let i=0;i<25;i++){
+      const slashAngle=-Math.PI*.5+(Math.PI*.55)*(i/25);
+      const r2=rand(W*.28,W*.58);
+      const sx=cx+Math.cos(slashAngle)*r2, sy=cy+Math.sin(slashAngle)*r2;
+      const perpA=slashAngle+Math.PI/2;
+      for(let j=0;j<10;j++){
+        P({x:sx,y:sy,
+          vx:Math.cos(perpA+rand(-.6,.6))*rand(4,14),vy:Math.sin(perpA+rand(-.6,.6))*rand(4,14),
+          life:35+rand(0,25),sz:3+rand(0,7),
+          col:rc(['#ffffff','#ffe066','#fff5aa','#ffcc00']),glow:true,type:'spark',g:.12});
+      }
+    }
+  },460);
+
+  /* ── PHASE 5: HOLY PILLARS descend (660ms) ── */
+  D(()=>{
+    for(let col=0;col<8;col++){
+      const px=cx+(col-3.5)*105;
+      D(()=>{
+        SHAKE(5,12); FLASH(200,180,80,.3);
+        for(let j=0;j<80;j++){
+          GPU(px+rand(-22,22),cy+H*.45,
+            rand(-1.5,1.5),-(rand(8,22)),
+            60+rand(0,40),8+rand(0,12),
+            1,rand(.88,1),rand(.4,.7),1, -.06,.985,.0);
+        }
+        for(let j=0;j<20;j++){
+          P({x:px+rand(-20,20),y:cy+H*.45,
+            vx:rand(-3,3),vy:-(rand(5,15)),
+            life:45,sz:4+rand(0,5),col:'#ffe066',glow:true,g:-.04,type:'star'});
+        }
+        W2({x:px,y:cy,col:'#fffbe8',maxR:65,thick:2.5,life:32});
+        /* pillar crack on ground */
+        groundCracks.push(new GroundCrack(px-10,cy+H*.3,px+10,cy+H*.45,'#ffe066',60));
+      },col*80);
+    }
+  },660);
+
+  /* ── PHASE 6: FALLING HOLY SHARDS (continuous 0–900ms) ── */
+  for(let i=0;i<140;i++){
+    D(()=>{
+      P({x:rand(0,W),y:rand(-80,cy-60),
+        vx:rand(-2.5,2.5),vy:rand(4,13),
+        life:75+rand(0,50),sz:5+rand(0,11),
+        col:rc(['#ffe066','#ffffff','#fffbe8','#fff5aa']),
+        glow:true,rs:rand(-.14,.14),type:'shard',g:.09});
+    },rand(0,900));
+  }
+
+  /* ── PHASE 7: GOLDEN STAR BURST (starburst) ── */
+  D(()=>{
+    for(let i=0;i<80;i++){
+      const a=Math.random()*Math.PI*2,s=rand(4,14);
+      P({x:cx+Math.cos(a)*18,y:cy+Math.sin(a)*18,
+        vx:Math.cos(a)*s,vy:Math.sin(a)*s-2,
+        life:70+rand(0,55),sz:6+rand(0,10),
+        col:rc(['#ffe066','#ffffff','#fff5aa','#ffcc00']),
+        glow:true,bloom:true,g:-.07,
+        type:Math.random()<.4?'star':Math.random()<.4?'cross':'dot'});
+    }
+  },500);
+
+  /* ── PHASE 8: DIVINE JUDGEMENT FINAL EXPLOSION (1100ms) ── */
+  D(()=>{
+    SHAKE(30,55); FLASH(255,255,220,1);
+    /* three final massive arcs simultaneously */
+    slashArcs.push(new SlashArc(cx,cy,-Math.PI*.9,Math.PI*1.8,W*.62,'#ffffff',28,70));
+    slashArcs.push(new SlashArc(cx,cy,-Math.PI*.9,Math.PI*1.8,W*.62,'#ffe066',18,65));
+    W2({x:cx,y:cy,col:'#ffffff',maxR:800,thick:10,life:90,fill:true});
+    W2({x:cx,y:cy,col:'#ffe066',maxR:550,thick:7,life:75,fill:true});
+    W2({x:cx,y:cy,col:'#fff8cc',maxR:350,thick:5,life:60});
+    /* mega burst GPU */
+    for(let i=0;i<1000;i++){
+      const a=Math.random()*Math.PI*2,s=rand(5,22);
+      GPU(cx,cy,Math.cos(a)*s,Math.sin(a)*s-2.5,
+        75,5+rand(0,10),1,rand(.85,1),rand(.2,.55),1, -.07,.974,.01);
+    }
+    /* radial ground cracks final */
+    for(let c=0;c<12;c++){
+      const crackAngle=(c/12)*Math.PI*2;
+      groundCracks.push(new GroundCrack(
+        cx+Math.cos(crackAngle)*25,cy+Math.sin(crackAngle)*25,
+        cx+Math.cos(crackAngle)*(W*.38+rand(0,W*.1)),cy+Math.sin(crackAngle)*(H*.28+rand(0,H*.1)),
+        rc(['#ffe066','#ffffff','#fff5aa']),90));
+    }
+    /* big holy stars */
+    for(let i=0;i<40;i++){
+      const a=Math.random()*Math.PI*2,s=rand(6,18);
+      P({x:cx,y:cy,vx:Math.cos(a)*s,vy:Math.sin(a)*s-3,
+        life:60,sz:10+rand(0,14),col:rc(['#ffe066','#ffffff']),
+        glow:true,rs:rand(-.12,.12),type:'star',g:-.05});
+    }
+  },1100);
+}
+
+/* ════════════════════════════════════════
+   2 · 烈焰爆炸 INFERNO
+   三層衝擊波 + 300顆火焰 + 餘燼
+   ════════════════════════════════════════ */
+function castFire(){
+  const cx=CX,cy=CY;
+  SHAKE(32,70); FLASH(255,100,0,.9);
+  const fc=['#ff2200','#ff5500','#ff8800','#ffbb00','#ffff44','#ff3300','#ff6600'];
+
+  /* TRIPLE WAVES */
+  W2({x:cx,y:cy,col:'#ff4400',maxR:680,thick:7,life:90,fill:true});
+  W2({x:cx,y:cy,col:'#ffaa00',maxR:380,thick:5,life:70,fill:true});
+  W2({x:cx,y:cy,col:'#ffffff',maxR:180,thick:3,life:50});
+
+  /* PRIMARY EXPLOSION — GPU 1800 particles */
+  for(let i=0;i<1800;i++){
+    const a=Math.random()*Math.PI*2, s=rand(3,22), r2=rand(0,70);
+    GPU(cx+Math.cos(a)*r2,cy+Math.sin(a)*r2,
+      Math.cos(a)*s,Math.sin(a)*s,
+      60+rand(0,65), 5+rand(0,15),
+      1,rand(.3,.9),0,1, .15,.96,.04);
+  }
+
+  /* EMBER WAVES — 10 staggered */
+  for(let wave=0;wave<10;wave++){
+    D(()=>{
+      SHAKE(8,16); FLASH(200,80,0,.35);
+      W2({x:cx,y:cy,col:rc(['#ff6600','#ff3300','#ffaa00']),maxR:200+wave*60,thick:2.5,life:45});
+      for(let i=0;i<80;i++){
+        const a=Math.random()*Math.PI*2,s=rand(2,11),r2=rand(0,160+wave*25);
+        GPU(cx+Math.cos(a)*r2,cy+Math.sin(a)*r2,
+          Math.cos(a)*s+rand(-3,3),Math.sin(a)*s-rand(0,5),
+          75+rand(0,55), 3+rand(0,6),
+          1,rand(.3,.8),0,1, -.08,.97,.06);
+      }
+    },wave*120);
+  }
+
+  /* CPU FIRE — large chunks */
+  for(let i=0;i<120;i++){
+    const a=Math.random()*Math.PI*2, s=rand(5,18);
+    P({x:cx+Math.cos(a)*30,y:cy+Math.sin(a)*30,
+      vx:Math.cos(a)*s,vy:Math.sin(a)*s,
+      life:65+rand(0,55),sz:8+rand(0,16),
+      col:rc(fc),glow:true,bloom:true,g:.14,drag:.955,type:'dot'});
+  }
+
+  /* SMOKE COLUMNS */
+  for(let i=0;i<80;i++){
+    P({x:cx+rand(-220,220),y:cy+rand(-60,60),
+      vx:rand(-1.5,1.5),vy:-(rand(1.5,6)),
+      life:120+rand(0,80),sz:35+rand(0,60),
+      col:'rgba(70,28,8,0.4)',g:-.015,drag:.992,type:'smoke',scaleOut:true});
+  }
+
+  /* GROUND FIRE */
+  for(let i=0;i<150;i++){
+    const px=cx+rand(-W*.45,W*.45);
+    GPU(px,cy+H*.32,rand(-2.5,2.5),-(rand(4,14)),
+      65+rand(0,45),9+rand(0,16),
+      1,rand(.3,.75),0,1, -.09,.975,.08);
+  }
+
+  /* HEAT RINGS */
+  for(let i=0;i<8;i++){
+    D(()=>{
+      for(let j=0;j<30;j++){
+        const a2=(j/30)*Math.PI*2,r2=35+i*45;
+        P({x:cx+Math.cos(a2)*r2,y:cy+Math.sin(a2)*r2,
+          vx:Math.cos(a2)*2.5,vy:Math.sin(a2)*2.5,
+          life:35,sz:5,col:'#ffaa00',glow:true,type:'ring'});
+      }
+      W2({x:cx,y:cy,col:'#ff6600',maxR:50+i*50,thick:1.5,life:30});
+    },i*95);
+  }
+
+  /* FIRESTORM — big overhead GPU burst */
+  D(()=>{
+    SHAKE(18,35);FLASH(255,120,0,.7);
+    for(let i=0;i<600;i++){
+      const a=Math.random()*Math.PI*2,s=rand(4,16),r2=rand(0,300);
+      GPU(cx+Math.cos(a)*r2,cy+Math.sin(a)*r2,
+        Math.cos(a)*s,Math.sin(a)*s-4,
+        80,4+rand(0,10),1,rand(.4,.85),0,1, -.06,.968,.07);
+    }
+    W2({x:cx,y:cy,col:'#ff4400',maxR:550,thick:5,life:65,fill:true});
+  },800);
+
+  /* FINAL MEGABURST */
+  D(()=>{
+    SHAKE(28,50);FLASH(255,200,50,1);
+    W2({x:cx,y:cy,col:'#ffffff',maxR:750,thick:8,life:80,fill:true});
+    for(let i=0;i<1000;i++){
+      const a=Math.random()*Math.PI*2,s=rand(6,26);
+      GPU(cx,cy,Math.cos(a)*s,Math.sin(a)*s,
+        70,6+rand(0,12),1,rand(.3,.9),0,1, .12,.96,.03);
+    }
+  },1300);
+}
+
+/* ════════════════════════════════════════
+   3 · 冰凍術 ICE
+   冰晶碎片 + 雪花水晶 + 地面冰封
+   ════════════════════════════════════════ */
+function castIce(){
+  const cx=CX,cy=CY;
+  SHAKE(14,35); FLASH(100,220,255,.7);
+  const ic=['#88ddff','#ccf0ff','#ffffff','#aaddff','#ddf8ff'];
+
+  /* CRYO WAVES */
+  W2({x:cx,y:cy,col:'#aaeeff',maxR:480,thick:5,life:80,fill:true});
+  W2({x:cx,y:cy,col:'#ffffff',maxR:240,thick:3.5,life:60});
+  W2({x:cx,y:cy,col:'#66ccff',maxR:140,thick:2.5,life:45});
+  for(let i=0;i<5;i++) D(()=>{W2({x:cx,y:cy,col:'#88ddff',maxR:60+i*80,thick:1.5,life:38,ey:.4});},i*90);
+
+  /* FREEZE CRACKS — bolts radiate outward */
+  for(let i=0;i<18;i++){
+    const a=(i/18)*Math.PI*2,len=rand(80,280);
+    BOLT({x1:cx,y1:cy,x2:cx+Math.cos(a)*len,y2:cy+Math.sin(a)*len,col:'#88ddff',w:3+rand(0,3),life:70,segs:8,depth:1});
+  }
+
+  /* GPU — primary crystal shards 1000 */
+  for(let i=0;i<1000;i++){
+    const a=Math.random()*Math.PI*2,s=rand(2,14),r2=rand(0,45);
+    GPU(cx+Math.cos(a)*r2,cy+Math.sin(a)*r2,
+      Math.cos(a)*s,Math.sin(a)*s,
+      75+rand(0,65), 5+rand(0,12),
+      rand(.5,1),rand(.85,1),1,1, .07,.984,.02);
+  }
+
+  /* CPU — large ice shards */
+  for(let i=0;i<160;i++){
+    const a=Math.random()*Math.PI*2,s=rand(2,12),r2=rand(0,40);
+    P({x:cx+Math.cos(a)*r2,y:cy+Math.sin(a)*r2,
+      vx:Math.cos(a)*s,vy:Math.sin(a)*s,
+      life:80+rand(0,65),sz:6+rand(0,12),
+      col:rc(ic),glow:true,bloom:true,g:.07,rs:rand(-.22,.22),type:'shard'});
+  }
+
+  /* CPU — snowflake crystals */
+  for(let i=0;i<90;i++){
+    const a=Math.random()*Math.PI*2,s=rand(1,7),r2=rand(0,W*.44);
+    P({x:cx+Math.cos(a)*r2,y:cy+Math.sin(a)*r2,
+      vx:Math.cos(a)*s,vy:Math.sin(a)*s,
+      life:100+rand(0,75),sz:10+rand(0,14),
+      col:'#ccf0ff',glow:true,rs:.022,g:.022,type:'snowflake'});
+  }
+
+  /* GROUND FREEZE — ice erupting upward */
+  for(let i=0;i<200;i++){
+    D(()=>{
+      const px=rand(0,W);
+      GPU(px,cy+rand(H*.06,H*.38),rand(-2,2),-(rand(3,12)),
+        80+rand(0,55),5+rand(0,10),rand(.5,1),rand(.85,1),1,1, .05,.983,.01);
+      if(Math.random()<.3){
+        P({x:px,y:cy+rand(H*.1,H*.35),vx:rand(-2,2),vy:-(rand(3,9)),
+          life:70,sz:5+rand(0,9),col:rc(ic),glow:true,rs:rand(-.14,.14),type:'shard',g:.05});
+      }
+    },rand(0,600));
+  }
+
+  /* HEX CRYSTAL LATTICE pulses */
+  for(let i=0;i<8;i++){
+    D(()=>{
+      const r2=40+i*55;
+      for(let j=0;j<24;j++){
+        const a2=(j/24)*Math.PI*2;
+        P({x:cx+Math.cos(a2)*r2,y:cy+Math.sin(a2)*r2,
+          vx:Math.cos(a2)*1.5,vy:Math.sin(a2)*1.5,
+          life:55,sz:5+rand(0,6),col:'#88ddff',glow:true,rs:.05,type:'hex'});
+      }
+      W2({x:cx,y:cy,col:'#aaeeff',maxR:r2+20,thick:1.5,life:35});
+    },i*100);
+  }
+
+  /* BLIZZARD AMBIENT */
+  for(let i=0;i<220;i++){
+    D(()=>{
+      GPU(rand(0,W),rand(-20,H*.5),rand(-4,4),rand(1,7),
+        90+rand(0,70),3+rand(0,5),rand(.5,1),rand(.85,1),1,rand(.4,.8), .02,.991,.04);
+    },rand(0,900));
+  }
+
+  /* FINAL FREEZE PULSE */
+  D(()=>{
+    SHAKE(12,25);FLASH(150,230,255,.8);
+    W2({x:cx,y:cy,col:'#ffffff',maxR:600,thick:6,life:70,fill:true});
+    for(let i=0;i<600;i++){
+      const a=Math.random()*Math.PI*2,s=rand(4,18);
+      GPU(cx,cy,Math.cos(a)*s,Math.sin(a)*s,
+        70,5+rand(0,10),rand(.5,1),rand(.85,1),1,1, .05,.977,.02);
+    }
+  },900);
+}
+
+/* ════════════════════════════════════════
+   4 · 旋風術 WIND/CYCLONE
+   八重螺旋環 + 翠綠樹葉 + 氣流
+   ════════════════════════════════════════ */
+function castWind(){
+  const cx=CX,cy=CY;
+  SHAKE(12,30); FLASH(50,200,100,.65);
+  const wc=['#44ff88','#aaffcc','#ffffff','#22dd66','#88ffbb'];
+
+  /* CYCLONE WAVES */
+  W2({x:cx,y:cy,col:'#44ff88',maxR:520,thick:5,life:80,fill:true});
+  W2({x:cx,y:cy,col:'#aaffcc',maxR:260,thick:3,life:58});
+  for(let i=0;i<10;i++) D(()=>W2({x:cx,y:cy,col:'#44ff88',maxR:55+i*58,thick:2,life:38}),i*95);
+
+  /* GPU — 12 SPIRAL RINGS */
+  for(let ring=0;ring<12;ring++){
+    const cnt=50+ring*10,r2=35+ring*42,base=ring*.78,life=75+ring*10;
+    for(let i=0;i<cnt;i++){
+      const angle=base+(i/cnt)*Math.PI*2,sp=3.8+ring*.62;
+      GPU(cx+Math.cos(angle)*r2,cy+Math.sin(angle)*r2,
+        Math.cos(angle+Math.PI/2)*sp*1.3,Math.sin(angle+Math.PI/2)*sp*1.3,
+        life, 2.8+ring*.15,
+        ring%3===0?.27:ring%3===1?.67:1,
+        ring%3===0?1:ring%3===1?1:.87,
+        ring%3===0?.53:ring%3===1?.8:1,
+        1, -.028,.984,.06);
+    }
+  }
+
+  /* CPU — LARGE LEAVES */
+  for(let i=0;i<120;i++){
+    const a=Math.random()*Math.PI*2,s=rand(5,16),r2=rand(0,120);
+    P({x:cx+Math.cos(a)*r2,y:cy+Math.sin(a)*r2,
+      vx:Math.cos(a+Math.PI*.5)*s,vy:Math.sin(a+Math.PI*.5)*s-2,
+      life:100+rand(0,65),sz:10+rand(0,12),col:rc(wc),
+      glow:true,rs:rand(-.2,.2),g:-.07,turbK:.1,type:'leaf'});
+  }
+
+  /* WIND STREAMS (ribbons) */
+  for(let i=0;i<40;i++){
+    const p2=P({x:rand(0,W),y:cy+rand(-H*.3,H*.3),
+      vx:rand(6,18)*(Math.random()<.5?1:-1),vy:rand(-1.5,1.5),
+      life:65+rand(0,45),sz:2.5,col:rc(['rgba(68,255,136,.5)','rgba(170,255,200,.4)']),
+      glow:true,turbK:.14,type:'ribbon',keepTrail:true});
+    p2.drag=.975;
+  }
+
+  /* INNER TWISTER — helical GPU */
+  for(let t2=0;t2<150;t2++){
+    const progress=t2/150,angle=progress*Math.PI*12;
+    const r2=progress*180,h2=progress*H*.3;
+    GPU(cx+Math.cos(angle)*r2,cy+Math.sin(angle)*r2*.5-h2,
+      Math.cos(angle+Math.PI/2)*5,Math.sin(angle+Math.PI/2)*3.5-4,
+      55+rand(0,35),5+rand(0,5),
+      .27,1,.53,1, -.04,.982,.05);
+  }
+
+  /* VERTICAL VORTEX COLUMN */
+  for(let i=0;i<300;i++){
+    const progress=Math.random(),angle=progress*Math.PI*16;
+    const r2=20+progress*160;
+    GPU(cx+Math.cos(angle)*r2,cy+Math.sin(angle)*r2*.4,
+      Math.cos(angle+Math.PI/2)*4,Math.sin(angle+Math.PI/2)*3-5,
+      60+rand(0,40),3+rand(0,5),
+      rand(.1,.5),1,rand(.3,.7),1, -.03,.98,.07);
+  }
+
+  /* VORTEX RINGS — pulsing */
+  for(let i=0;i<8;i++){
+    D(()=>{
+      SHAKE(5,12);
+      W2({x:cx,y:cy,col:'#44ff88',maxR:65+i*65,thick:2,life:38});
+      for(let j=0;j<20;j++){
+        const a2=Math.random()*Math.PI*2,r2=55+i*60;
+        P({x:cx+Math.cos(a2)*r2,y:cy+Math.sin(a2)*r2,
+          vx:Math.cos(a2+Math.PI/2)*6,vy:Math.sin(a2+Math.PI/2)*6,
+          life:30,sz:4,col:'#aaffcc',glow:true,type:'leaf',rs:.2});
+      }
+    },i*110);
+  }
+
+  /* FINAL MEGA CYCLONE */
+  D(()=>{
+    SHAKE(16,32);FLASH(30,160,80,.7);
+    W2({x:cx,y:cy,col:'#44ff88',maxR:700,thick:7,life:80,fill:true});
+    for(let i=0;i<700;i++){
+      const a=Math.random()*Math.PI*2,s=rand(5,22),r2=rand(0,200);
+      GPU(cx+Math.cos(a)*r2,cy+Math.sin(a)*r2,
+        Math.cos(a+Math.PI*.5)*s,Math.sin(a+Math.PI*.5)*s-3,
+        75,4+rand(0,9),.27,1,.53,1, -.05,.974,.06);
+    }
+  },1100);
+}
+
+/* ════════════════════════════════════════
+   5 · 閃電術 THUNDER GOD
+   八道閃電依序 + 分支殘影 + 電光石火
+   ════════════════════════════════════════ */
+function castThunder(){
+  const cx=CX,cy=CY;
+  SHAKE(35,75); FLASH(255,240,50,1);
+  const tc=['#ffee00','#ffffff','#ff8800','#ffaa00','#ffdd44'];
+
+  /* THUNDER WAVES */
+  W2({x:cx,y:cy,col:'#ffee00',maxR:560,thick:7,life:85,fill:true});
+  W2({x:cx,y:cy,col:'#ff8800',maxR:290,thick:5,life:65,fill:true});
+  W2({x:cx,y:cy,col:'#ffffff',maxR:155,thick:3,life:48});
+
+  /* MAIN THUNDER STRIKES — 8 bolts staggered */
+  for(let i=0;i<8;i++){
+    D(()=>{
+      const tx=cx+rand(-150,150),ty=cy+rand(-110,110);
+      /* 3-layer bolt (white core, yellow mid, orange outer) */
+      BOLT({x1:tx+rand(-150,150),y1:0,x2:tx,y2:ty,col:'#ffffff',w:8,life:35,segs:16});
+      BOLT({x1:tx+rand(-90,90),y1:0,x2:tx,y2:ty,col:'#ffee00',w:5,life:28,segs:14});
+      BOLT({x1:tx+rand(-50,50),y1:0,x2:tx,y2:ty,col:'#ff8800',w:3,life:22,segs:12});
+      /* ground branches */
+      for(let b=0;b<6;b++){
+        const ba=Math.random()*Math.PI*2;
+        BOLT({x1:tx,y1:ty,x2:tx+Math.cos(ba)*rand(70,180),y2:ty+Math.sin(ba)*rand(50,130),
+          col:'#ffdd00',w:2.5,life:22,segs:7,depth:2});
+      }
+      /* afterimage bolts */
+      for(let k=0;k<3;k++){
+        D(()=>{
+          BOLT({x1:tx+rand(-30,30),y1:0,x2:tx+rand(-20,20),y2:ty+rand(-20,20),
+            col:`rgba(255,220,0,${.5-k*.15})`,w:3-k,life:12,segs:10});
+        },k*40);
+      }
+      /* impact flash */
+      for(let k=0;k<40;k++){
+        const a=Math.random()*Math.PI*2,s=rand(7,22);
+        P({x:tx+rand(-25,25),y:ty+rand(-25,25),
+          vx:Math.cos(a)*s,vy:Math.sin(a)*s,
+          life:28+rand(0,22),sz:3+rand(0,5),
+          col:rc(tc),glow:true,bloom:true,g:.22,type:'spark'});
+      }
+      SHAKE(10,20);FLASH(200,180,30,.5);
+    },i*75);
+  }
+
+  /* GPU — MASSIVE SPARK CLOUD */
+  for(let i=0;i<1400;i++){
+    const a=Math.random()*Math.PI*2,s=rand(4,18);
+    GPU(cx+rand(-120,120),cy+rand(-120,120),
+      Math.cos(a)*s,Math.sin(a)*s,
+      38+rand(0,38),2.5+rand(0,5),
+      1,rand(.8,1),rand(0,.5),1, .24,.96,.01);
+  }
+
+  /* CPU — ELECTRO ORBS */
+  for(let i=0;i<50;i++){
+    const a=Math.random()*Math.PI*2,s=rand(3,11),r2=rand(25,120);
+    P({x:cx+Math.cos(a)*r2,y:cy+Math.sin(a)*r2,
+      vx:Math.cos(a)*s,vy:Math.sin(a)*s,
+      life:55+rand(0,35),sz:9+rand(0,12),
+      col:'#ffee00',glow:true,bloom:true,rs:rand(-.3,.3),type:'lightning_orb'});
+  }
+
+  /* SKY-TO-GROUND RANDOM ARCS */
+  for(let i=0;i<14;i++){
+    D(()=>{
+      const gx=rand(0,W);
+      BOLT({x1:gx+rand(-80,80),y1:0,x2:gx,y2:H*.68,col:'#ffee00',w:3.5,life:28,segs:12});
+      BOLT({x1:gx+rand(-40,40),y1:0,x2:gx+rand(-20,20),y2:H*.68,col:'#ff8800',w:2,life:20,segs:10});
+      SHAKE(6,12);FLASH(150,120,0,.35);
+    },rand(80,1000));
+  }
+
+  /* THUNDER SMOKE */
+  for(let i=0;i<55;i++){
+    P({x:cx+rand(-180,180),y:cy+rand(-120,120),
+      vx:rand(-1.2,1.2),vy:-(rand(1.5,5)),
+      life:100+rand(0,70),sz:28+rand(0,45),
+      col:'rgba(55,45,8,.38)',g:-.007,drag:.993,type:'smoke',scaleOut:true});
+  }
+
+  /* PLASMA RING PULSES */
+  for(let i=0;i<8;i++){
+    D(()=>{
+      W2({x:cx,y:cy,col:'#ffee00',maxR:50+i*60,thick:2.5,life:35});
+      W2({x:cx,y:cy,col:'#ff8800',maxR:30+i*45,thick:1.5,life:28});
+    },i*100);
+  }
+
+  /* OVERCHARGE FINAL */
+  D(()=>{
+    SHAKE(25,45);FLASH(255,240,80,1);
+    W2({x:cx,y:cy,col:'#ffffff',maxR:800,thick:9,life:85,fill:true});
+    for(let i=0;i<900;i++){
+      const a=Math.random()*Math.PI*2,s=rand(5,24);
+      GPU(cx,cy,Math.cos(a)*s,Math.sin(a)*s,
+        65,4+rand(0,10),1,rand(.8,1),rand(0,.4),1, .2,.972,.01);
+    }
+    /* final cross bolts from center */
+    for(let d=0;d<8;d++){
+      const da=(d/8)*Math.PI*2;
+      BOLT({x1:cx,y1:cy,x2:cx+Math.cos(da)*W*.6,y2:cy+Math.sin(da)*H*.5,
+        col:'#ffffff',w:5,life:30,segs:10,depth:2});
+    }
+  },1200);
+}
+
+/* ================================================================
+   PERSISTENT RASENGAN ORB
+   ================================================================ */
+function drawRasenganOrb(dt){
+  if(activeSkill!==0) return;
+  const cx=CX,cy=CY,sp=frame*.058;
+  ctx.save();
+  ctx.shadowColor='#00aaff'; ctx.shadowBlur=45;
+  for(let ring=0;ring<7;ring++){
+    const r2=12+ring*21,cnt=8+ring*6;
+    for(let j=0;j<cnt;j++){
+      const a=(j/cnt)*Math.PI*2+sp*(ring%2?1:-1);
+      ctx.globalAlpha=.82;
+      ctx.fillStyle=ring%2===0?'#00ccff':'#ffffff';
+      ctx.beginPath();
+      ctx.arc(cx+Math.cos(a)*r2,cy+Math.sin(a)*r2,3.5,0,Math.PI*2);
+      ctx.fill();
+    }
+  }
+  /* center orb gradient */
+  ctx.globalAlpha=.96;
+  const g=ctx.createRadialGradient(cx,cy,0,cx,cy,18);
+  g.addColorStop(0,'#ffffff');g.addColorStop(.35,'#00ccff');g.addColorStop(1,'rgba(0,170,255,0)');
+  ctx.fillStyle=g;ctx.beginPath();ctx.arc(cx,cy,18,0,Math.PI*2);ctx.fill();
+  /* rotating outer ring */
+  ctx.globalAlpha=.6;ctx.strokeStyle='#00aaff';ctx.lineWidth=2;
+  ctx.beginPath();ctx.arc(cx,cy,28,sp,sp+Math.PI*1.3);ctx.stroke();
+  ctx.beginPath();ctx.arc(cx,cy,28,sp+Math.PI,sp+Math.PI*2.3);ctx.stroke();
+  ctx.restore();
+}
+
+/* ================================================================
+   AMBIENT DUST
+   ================================================================ */
+let ambT=0;
+function spawnAmbient(dt){
+  ambT+=dt;
+  if(ambT<3) return; ambT=0;
+  GPU(rand(0,W),rand(0,H*.75),rand(-.3,.3),rand(-.5,-.1),
+    200+rand(0,150),rand(.5,1.8),.85,.85,.85,rand(.04,.15), 0,.999,.01);
+}
+
+/* ================================================================
+   MANA BAR + FPS + COMBO
+   ================================================================ */
+let manaFillPct=0;
+const manaEl=document.getElementById('mfill');
+const comboEl=document.getElementById('combo');
+
+function updateUI(dt){
+  manaT+=dt;
+  manaFillPct=Math.min(1,manaT/200);
+  manaEl.style.width=(manaFillPct*100)+'%';
+  const hue=200+manaFillPct*60;
+  manaEl.style.background=`linear-gradient(90deg,hsl(${hue},100%,50%),#ffffff)`;
+  if(comboT>0){ comboT-=dt*16.7; if(comboT<=0){comboN=0;comboEl.style.opacity='0';} }
+}
+
+/* ================================================================
+   MAIN RENDER LOOP
+   ================================================================ */
+let lastTS=performance.now(), frame=0;
+let fpsSum=0,fpsCnt=0,fpsTimer2=0;
+const fpsEl=document.getElementById('fps');
+
+function loop(ts){
+  requestAnimationFrame(loop);
+  const rawDt=(ts-lastTS)/16.667; lastTS=ts;
+  const dt=Math.min(rawDt,3); frame++;
+
+  fpsSum+=1000/(ts-lastTS+.001); fpsCnt++;
+  fpsTimer2+=dt*16.667;
+  if(fpsTimer2>600){ fpsEl.textContent=Math.round(fpsSum/fpsCnt)+' FPS'; fpsSum=0;fpsCnt=0;fpsTimer2=0; }
+
+  updateTurb(dt);
+  updateCam(dt);
+  updateUI(dt);
+  spawnAmbient(dt);
+
+  /* step GPU particles */
+  gpuLive=gpuLive.filter(p=>{p.step(dt);return p.life>0;});
+
+  /* step CPU particles */
+  particles=particles.filter(p=>{p.step(dt);return p.life>0;});
+  waves=waves.filter(w=>{w.step(dt);return w.life>0;});
+  bolts=bolts.filter(b=>{b.step(dt);return b.life>0;});
+  slashArcs=slashArcs.filter(s=>{s.step(dt);return s.life>0;});
+  groundCracks=groundCracks.filter(gc=>{gc.step(dt);return gc.life>0;});
+
+  /* ── CANVAS2D RENDER ── */
+  ctx.save();
+  ctx.translate(cam.x,cam.y);
+  drawBG(dt);
+  groundCracks.forEach(gc=>gc.draw());
+  waves.forEach(w=>w.draw());
+  bolts.forEach(b=>b.draw());
+  slashArcs.forEach(s=>s.draw());
+  particles.forEach(p=>p.draw());
+  drawRasenganOrb(dt);
+  drawGround();
+  drawVignette();
+  ctx.restore();
+
+  /* ── WEBGL RENDER ── */
+  if(gl){
+    buildGPUArrays();
+    if(gpu.count>0){
+      gl.clearColor(0,0,0,0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      uploadGPU();
+      gl.drawArrays(gl.POINTS,0,gpu.count);
+    }
+  }
+}
+
+/* ── BOOT ── */
+resize();
+initGL();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
